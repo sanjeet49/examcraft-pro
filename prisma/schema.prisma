@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String?
+  name       String?
+  role       String   @default("TEACHER") // TEACHER, ADMIN, SUPER_ADMIN
+  isApproved Boolean  @default(false)
+  isPremium  Boolean  @default(false)
+  credits    Int      @default(3)
+  papers     Paper[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Paper {
+  id             String     @id @default(cuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schoolName     String
+  subject        String
+  examName       String
+  totalMarks     Int
+  date           DateTime
+  layoutSettings Json?
+  status         String     @default("DRAFT") // DRAFT, PENDING_ADMIN, PENDING_SUPERADMIN, APPROVED, REJECTED
+  questions      Question[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  paperId       String
+  paper         Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  type          String // MCQ, TF, DESCRIPTIVE, MATCH, MAP, FILL_IN_THE_BLANKS
+  content       Json
+  marks         Int
+  sequenceOrder Int
+  customHeading String?
+  hasOr         Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
