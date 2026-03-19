@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, Sparkles, Plus, Trash2, Download, Save, Send, ShieldCheck, XCircle, Upload, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Minus, Circle, Eye, Pencil } from "lucide-react";
+import { Loader2, Sparkles, Plus, Trash2, Download, Save, Send, ShieldCheck, XCircle, Upload, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Minus, Circle, Eye, Pencil, Globe, Copy, Check } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AILoadingOverlay } from "@/components/dashboard/AILoadingOverlay";
 import "katex/dist/katex.min.css";
@@ -50,6 +50,11 @@ function BuilderContent() {
     const [status, setStatus] = useState<string>("DRAFT");
     const [mobileTab, setMobileTab] = useState<'build' | 'preview'>('build');
     const [fontsLoaded, setFontsLoaded] = useState(false);
+    
+    // Publish Online State
+    const [showPublishModal, setShowPublishModal] = useState(false);
+    const [isPublishing, setIsPublishing] = useState(false);
+    const [copiedLink, setCopiedLink] = useState(false);
 
     const { data: session } = useSession();
     const userRole = session?.user?.role || "TEACHER";
@@ -57,7 +62,40 @@ function BuilderContent() {
     const questionsContainerRef = useRef<HTMLDivElement>(null);
     const headerContainerRef = useRef<HTMLDivElement>(null);
 
-    // Dynamically set the A4 scale CSS variable so the preview paper fits the screen on mobile
+    // Toggle Publish State
+    const handleTogglePublish = async () => {
+        if (!paperId) return;
+        setIsPublishing(true);
+        const newStatus = !metadata.isPublishedOnline;
+        try {
+            const res = await fetch(`/api/paper/${paperId}/publish`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ isPublishedOnline: newStatus }),
+            });
+            if (res.ok) {
+                setMetadata(prev => ({ ...prev, isPublishedOnline: newStatus }));
+                toast.success(newStatus ? "Paper is now Live!" : "Paper un-published.");
+            } else {
+                toast.error("Failed to update status");
+            }
+        } catch (error) {
+            toast.error("An error occurred");
+        } finally {
+            setIsPublishing(false);
+        }
+    };
+
+    const handleCopyLink = () => {
+        if (!paperId) return;
+        const link = `${window.location.origin}/test/${paperId}`;
+        navigator.clipboard.writeText(link);
+        setCopiedLink(true);
+        setTimeout(() => setCopiedLink(false), 2000);
+        toast.success("Test Link Copied!");
+    };
+
+    // Calculate Marks dynamically set the A4 scale CSS variable so the preview paper fits the screen on mobile
     useEffect(() => {
         const A4_PX_WIDTH = 794; // 210mm at 96dpi
         const updateScale = () => {
@@ -100,7 +138,8 @@ function BuilderContent() {
                             instructions: p.layoutSettings?.instructions || "",
                             standard: p.layoutSettings?.standard || "",
                             timeAllowed: p.layoutSettings?.timeAllowed || "",
-                            showStudentInfo: p.layoutSettings?.showStudentInfo !== false
+                            showStudentInfo: p.layoutSettings?.showStudentInfo !== false,
+                            isPublishedOnline: p.isPublishedOnline || false
                         });
                         setQuestions(p.questions || []);
                         setStatus(p.status || "DRAFT");
@@ -1364,6 +1403,7 @@ function BuilderContent() {
                                 {status !== "DRAFT" && (
                                     <div className="text-gray-500 italic mt-2 mr-4">Paper is locked under review.</div>
                                 )}
+                                <Button className="bg-emerald-600 hover:bg-emerald-700 ml-4" onClick={() => setShowPublishModal(true)}><Globe className="w-4 h-4 mr-2" /> Publish Online</Button>
                             </>
                         )}
 
@@ -1395,6 +1435,7 @@ function BuilderContent() {
                                 )}
                                 <Button variant="outline" onClick={() => generateDocx(metadata, questions)} className="ml-4"><Download className="w-4 h-4 mr-2" /> Export DOCX</Button>
                                 <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={generatePdfViaBrowser}><Download className="w-4 h-4 mr-2" /> Print PDF</Button>
+                                <Button className="bg-emerald-600 hover:bg-emerald-700 ml-4" onClick={() => setShowPublishModal(true)}><Globe className="w-4 h-4 mr-2" /> Publish Online</Button>
                             </>
                         )}
 
@@ -1419,6 +1460,7 @@ function BuilderContent() {
                                 )}
                                 <Button variant="outline" onClick={() => generateDocx(metadata, questions)} className="ml-4"><Download className="w-4 h-4 mr-2" /> Export DOCX</Button>
                                 <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={generatePdfViaBrowser}><Download className="w-4 h-4 mr-2" /> Print PDF</Button>
+                                <Button className="bg-emerald-600 hover:bg-emerald-700 ml-4" onClick={() => setShowPublishModal(true)}><Globe className="w-4 h-4 mr-2" /> Publish Online</Button>
                             </>
                         )}
                     </div>
@@ -2192,6 +2234,55 @@ function BuilderContent() {
                     </div>
                 </div>
             </div>
+
+            {/* Publish Online Modal */}
+            {showPublishModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold flex items-center"><Globe className="w-5 h-5 mr-2 text-emerald-600" /> Publish Digital Test</h2>
+                            <button onClick={() => setShowPublishModal(false)} className="text-gray-500 hover:bg-gray-100 p-1 rounded-full"><XCircle className="w-5 h-5" /></button>
+                        </div>
+                        <div className="space-y-4">
+                            <p className="text-gray-600 text-sm">
+                                Publishing this exam creates a live web link that students can access from any device. Objective questions (MCQs, True/False) will be automatically graded!
+                            </p>
+                            
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex items-center justify-between">
+                                <div>
+                                    <div className="font-semibold text-gray-800">Online Status</div>
+                                    <div className="text-xs text-gray-500">{metadata.isPublishedOnline ? "Students can take the test" : "Test is offline"}</div>
+                                </div>
+                                <Button 
+                                    onClick={handleTogglePublish} 
+                                    disabled={isPublishing || !paperId}
+                                    className={`${metadata.isPublishedOnline ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'}`}
+                                >
+                                    {isPublishing ? <Loader2 className="w-4 h-4 animate-spin" /> : (metadata.isPublishedOnline ? "Take Offline" : "Publish Now")}
+                                </Button>
+                            </div>
+
+                            {metadata.isPublishedOnline && paperId && (
+                                <div className="space-y-2 pt-2 border-t border-gray-200">
+                                    <Label>Student Test Link</Label>
+                                    <div className="flex gap-2">
+                                        <Input readOnly value={`${typeof window !== 'undefined' ? window.location.origin : ''}/test/${paperId}`} className="bg-gray-50 font-mono text-sm" />
+                                        <Button onClick={handleCopyLink} variant="outline" className="flex-shrink-0">
+                                            {copiedLink ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                                        </Button>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-2">
+                                        You can view submissions from the Admin Dashboard or Submissions tab.
+                                    </p>
+                                    <Button onClick={() => router.push(`/dashboard/submissions/${paperId}`)} className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700">
+                                        <Eye className="w-4 h-4 mr-2" /> View Submissions
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

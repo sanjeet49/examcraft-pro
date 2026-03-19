@@ -35,6 +35,8 @@ export interface PaperMetadata {
     watermarkOpacity?: number;
     // Accessibility (Phase 5)
     isDyslexiaFriendly?: boolean;
+    // Digital Publishing
+    isPublishedOnline?: boolean;
 }
 
 // Structure per question type
