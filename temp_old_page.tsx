@@ -16,8 +16,6 @@ import { toast } from "sonner";
 import { Loader2, Sparkles, Plus, Trash2, Download, Save, Send, ShieldCheck, XCircle, Upload, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Minus, Circle, Eye, Pencil } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AILoadingOverlay } from "@/components/dashboard/AILoadingOverlay";
-import "katex/dist/katex.min.css";
-import Latex from "react-latex-next";
 
 // Mock implementation of a simple unique ID generator
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -49,7 +47,6 @@ function BuilderContent() {
     const [pages, setPages] = useState<Question[][]>([[]]);
     const [status, setStatus] = useState<string>("DRAFT");
     const [mobileTab, setMobileTab] = useState<'build' | 'preview'>('build');
-    const [fontsLoaded, setFontsLoaded] = useState(false);
 
     const { data: session } = useSession();
     const userRole = session?.user?.role || "TEACHER";
@@ -67,11 +64,6 @@ function BuilderContent() {
         };
         updateScale();
         window.addEventListener('resize', updateScale);
-        
-        document.fonts.ready.then(() => {
-            setFontsLoaded(true);
-        });
-
         return () => window.removeEventListener('resize', updateScale);
     }, []);
 
@@ -484,8 +476,7 @@ function BuilderContent() {
         metadata.isDyslexiaFriendly,
         metadata.headerTemplate,
         metadata.schoolLogoWidth,
-        metadata.schoolLogoHeight,
-        fontsLoaded
+        metadata.schoolLogoHeight
     ]);
 
     return (
@@ -2041,11 +2032,11 @@ function BuilderContent() {
                                                             <div className="font-medium">
                                                                 <div className="flex justify-between items-start gap-4">
                                                                     <p className="text-justify flex-1">
-                                                                            {!/^\d+[\.\)]/.test((q.content.questionText || "").trim()) && (
-                                                                                <span className="font-bold mr-1">{q.sequenceOrder}.</span>
-                                                                            )}
-                                                                            <Latex>{q.content.questionText || "__________________________"}</Latex>
-                                                                        </p>
+                                                                        {!/^\d+[\.\)]/.test((q.content.questionText || "").trim()) && (
+                                                                            <span className="font-bold mr-1">{q.sequenceOrder}.</span>
+                                                                        )}
+                                                                        {q.content.questionText || "__________________________"}
+                                                                    </p>
                                                                     {q.type === "TF" && (
                                                                         <span className="font-mono font-bold tracking-widest flex-shrink-0 pt-0.5">[    ]</span>
                                                                     )}
@@ -2078,7 +2069,7 @@ function BuilderContent() {
                                                                         return (
                                                                             <div key={optI} className={`flex items-start ${isCorrect ? 'bg-green-50 py-0.5 px-1 -ml-1 rounded' : ''}`}>
                                                                                 <span className={`mr-2 whitespace-nowrap ${isCorrect ? 'font-bold text-green-700' : ''}`}>({String.fromCharCode(97 + optI)})</span>
-                                                                                <span className={`break-words ${isCorrect ? 'font-bold text-green-700' : ''}`}><Latex>{opt}</Latex></span>
+                                                                                <span className={`break-words ${isCorrect ? 'font-bold text-green-700' : ''}`}>{opt}</span>
                                                                             </div>
                                                                         );
                                                                     })}
@@ -2106,8 +2097,8 @@ function BuilderContent() {
                                                                     <tbody>
                                                                         {(q.content.pairs || []).map((pair: any, pIndex: number) => (
                                                                             <tr key={pIndex}>
-                                                                                <td className="py-1 pr-4">{pIndex + 1}. <Latex>{String(pair.left)}</Latex></td>
-                                                                                <td className="py-1 pl-4">({String.fromCharCode(97 + pIndex)}) <Latex>{String(pair.right)}</Latex></td>
+                                                                                <td className="py-1 pr-4">{pIndex + 1}. {pair.left}</td>
+                                                                                <td className="py-1 pl-4">({String.fromCharCode(97 + pIndex)}) {pair.right}</td>
                                                                             </tr>
                                                                         ))}
                                                                     </tbody>
@@ -2123,7 +2114,7 @@ function BuilderContent() {
                                                                             <tr key={rIndex}>
                                                                                 {row.map((cell: string, cIndex: number) => (
                                                                                     <td key={cIndex} className={`border border-black p-1 px-2 ${rIndex === 0 ? "font-bold text-center" : ""}`}>
-                                                                                        <Latex>{cell}</Latex>
+                                                                                        {cell}
                                                                                     </td>
                                                                                 ))}
                                                                             </tr>
@@ -2155,7 +2146,7 @@ function BuilderContent() {
                                                         {metadata.showAnswerLines === false && q.content.solutionText && (
                                                             <div className="mt-2 ml-4 p-2 bg-green-50 text-green-800 italic border-l-2 border-green-500 rounded text-[11pt]">
                                                                 <span className="font-bold mr-1">Solution:</span>
-                                                                <Latex>{q.content.solutionText}</Latex>
+                                                                {q.content.solutionText}
                                                             </div>
                                                         )}
                                                         {metadata.showAnswerLines === false && q.type === "TF" && typeof q.content.isTrue === 'boolean' && (
@@ -2165,7 +2156,7 @@ function BuilderContent() {
                                                         )}
                                                         {metadata.showAnswerLines === false && q.type === "MCQ" && typeof q.content.correctIndex === 'number' && q.content.options && q.content.options[q.content.correctIndex] && (
                                                             <div className="mt-1 ml-4 text-[11pt] font-bold text-green-700">
-                                                                Answer: ({String.fromCharCode(97 + q.content.correctIndex)}) <Latex>{q.content.options[q.content.correctIndex]}</Latex>
+                                                                Answer: ({String.fromCharCode(97 + q.content.correctIndex)}) {q.content.options[q.content.correctIndex]}
                                                             </div>
                                                         )}
 
