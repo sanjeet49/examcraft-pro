@@ -29,11 +29,23 @@ export async function POST(
         }
 
         let totalScore = 0;
+        let correctCount = 0;
+        let wrongCount = 0;
+        let unattemptedCount = 0;
+        let maxScore = 0; // Total possible marks for auto-gradable questions
 
         // --- THE AUTO GRADING ENGINE ---
         paper.questions.forEach((q) => {
+            const isAutoGradable = q.type === "MCQ" || q.type === "TF";
+            if (!isAutoGradable) return; // Skip manual grading questions for report stats
+
+            maxScore += q.marks;
             const studentAnswer = responses[q.id];
-            if (studentAnswer === undefined || studentAnswer === null) return; // skipped
+            
+            if (studentAnswer === undefined || studentAnswer === null || studentAnswer === '') {
+                unattemptedCount++;
+                return; // skipped
+            }
 
             const content: any = q.content;
             let isCorrect = false;
@@ -55,6 +67,9 @@ export async function POST(
 
             if (isCorrect) {
                  totalScore += q.marks;
+                 correctCount++;
+            } else {
+                 wrongCount++;
             }
         });
 
@@ -73,7 +88,14 @@ export async function POST(
         return NextResponse.json({
             success: true,
             submissionId: submission.id,
-            autoGradedScore: totalScore
+            autoGradedScore: totalScore,
+            report: {
+                correctCount,
+                wrongCount,
+                unattemptedCount,
+                maxScore,
+                totalScore
+            }
         });
 
     } catch (error: any) {

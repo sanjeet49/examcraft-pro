@@ -74,9 +74,9 @@ export default async function SubmissionsPage({ params }: { params: Promise<{ id
                                 <tr>
                                     <th className="px-6 py-4 font-bold tracking-wider">Student Name</th>
                                     <th className="px-6 py-4 font-bold tracking-wider">Roll No</th>
-                                    <th className="px-6 py-4 font-bold tracking-wider">Class/Sec</th>
                                     <th className="px-6 py-4 font-bold tracking-wider text-center">Auto-Graded Score</th>
                                     <th className="px-6 py-4 font-bold tracking-wider text-right">Submitted At</th>
+                                    <th className="px-6 py-4 font-bold tracking-wider text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 bg-white">
@@ -102,6 +102,13 @@ export default async function SubmissionsPage({ params }: { params: Promise<{ id
                                         </td>
                                         <td className="px-6 py-4 text-gray-500 text-right font-mono text-xs">
                                             {dayjs(sub.submittedAt).format("MMM D, YYYY • h:mm A")}
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <Link href={`/dashboard/submissions/${paper.id}/report/${sub.id}`}>
+                                                <Button size="sm" variant="outline" className="text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200">
+                                                    <Eye className="w-4 h-4 mr-2" /> Report PDF
+                                                </Button>
+                                            </Link>
                                         </td>
                                     </tr>
                                 ))}
