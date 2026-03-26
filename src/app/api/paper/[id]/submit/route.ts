@@ -8,7 +8,7 @@ export async function POST(
     try {
         const { id: paperId } = await params;
         const body = await req.json();
-        const { studentName, rollNo, division, responses } = body;
+        const { studentName, rollNo, division, responses, cheatWarnings } = body;
 
         if (!studentName || !responses) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -81,7 +81,8 @@ export async function POST(
                 rollNo: rollNo?.trim() || null,
                 division: division?.trim() || null,
                 responses: responses,
-                totalScore: totalScore
+                totalScore: totalScore,
+                cheatWarnings: cheatWarnings || 0
             }
         });
 

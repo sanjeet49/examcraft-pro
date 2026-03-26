@@ -7,6 +7,7 @@ import { Clock, Eye, Edit, Trash2, Loader2, FileText } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import dayjs from "dayjs";
 
 interface PaperCardProps {
     paper: {
@@ -68,7 +69,7 @@ export function PaperCard({ paper, userRole = "TEACHER" }: PaperCardProps) {
                     </div>
                     <div className="flex items-center text-xs text-gray-500">
                         <Clock className="w-3 h-3 mr-1" />
-                        {new Date(paper.createdAt).toLocaleDateString()}
+                        {dayjs(paper.createdAt).format("MMM D, YYYY")}
                     </div>
                 </div>
                 <CardTitle className="text-lg line-clamp-1" title={paper.examName}>{paper.examName || "Untitled Exam"}</CardTitle>

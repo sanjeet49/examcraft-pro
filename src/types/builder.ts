@@ -24,12 +24,14 @@ export interface PaperMetadata {
     instructions: string;
     standard: string;
     timeAllowed: string;
+    timeLimit?: number;
     showStudentInfo: boolean;
     schoolLogo?: string;
     schoolLogoWidth?: number;
     schoolLogoHeight?: number;
     schoolLogoAlignment?: 'left' | 'center' | 'right';
     showAnswerLines?: boolean;
+    showAnswers?: boolean;
     headerTemplate?: 'classic' | 'modern' | 'ivyleague' | 'minimalist';
     watermarkImage?: string;
     watermarkOpacity?: number;

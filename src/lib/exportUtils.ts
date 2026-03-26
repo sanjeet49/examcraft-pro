@@ -355,11 +355,11 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                                 const rows = [];
                                 for (let i = 0; i < optionsData.length; i += 2) {
                                     const opt1Text = optionsData[i] ? `(${String.fromCharCode(97 + i)}) ${optionsData[i]}` : "";
-                                    const opt1IsCorrect = metadata.showAnswerLines === false && q.content.correctIndex === i;
+                                    const opt1IsCorrect = metadata.showAnswers === true && q.content.correctIndex === i;
                                     const opt1Run = new TextRun({ text: opt1Text, bold: opt1IsCorrect, color: opt1IsCorrect ? "008000" : "000000" });
 
                                     const opt2Text = optionsData[i + 1] ? `(${String.fromCharCode(97 + i + 1)}) ${optionsData[i + 1]}` : "";
-                                    const opt2IsCorrect = metadata.showAnswerLines === false && q.content.correctIndex === i + 1;
+                                    const opt2IsCorrect = metadata.showAnswers === true && q.content.correctIndex === i + 1;
                                     const opt2Run = new TextRun({ text: opt2Text, bold: opt2IsCorrect, color: opt2IsCorrect ? "008000" : "000000" });
 
                                     rows.push(
@@ -389,7 +389,7 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                             } else {
                                 children.push(new Paragraph({
                                     children: optionsData.map((opt: string, optI: number) => {
-                                        const isCorrect = metadata.showAnswerLines === false && q.content.correctIndex === optI;
+                                        const isCorrect = metadata.showAnswers === true && q.content.correctIndex === optI;
                                         return new TextRun({
                                             text: `  (${String.fromCharCode(97 + optI)}) ${opt}          `,
                                             bold: isCorrect,
@@ -486,11 +486,11 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                                     const rows = [];
                                     for (let i = 0; i < optionsData.length; i += 2) {
                                         const opt1Text = optionsData[i]?.trim() ? `(${String.fromCharCode(97 + i)}) ${optionsData[i]}` : "";
-                                        const opt1IsCorrect = metadata.showAnswerLines === false && q.content.correctIndex === i;
+                                        const opt1IsCorrect = metadata.showAnswers === true && q.content.correctIndex === i;
                                         const opt1Run = new TextRun({ text: opt1Text, bold: opt1IsCorrect, color: opt1IsCorrect ? "008000" : "000000" });
 
                                         const opt2Text = optionsData[i + 1]?.trim() ? `(${String.fromCharCode(97 + i + 1)}) ${optionsData[i + 1]}` : "";
-                                        const opt2IsCorrect = metadata.showAnswerLines === false && q.content.correctIndex === i + 1;
+                                        const opt2IsCorrect = metadata.showAnswers === true && q.content.correctIndex === i + 1;
                                         const opt2Run = new TextRun({ text: opt2Text, bold: opt2IsCorrect, color: opt2IsCorrect ? "008000" : "000000" });
 
                                         rows.push(
@@ -521,7 +521,7 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                                     children.push(new Paragraph({
                                         children: optionsData.map((opt: string, optI: number) => {
                                             if (!opt.trim()) return new TextRun({ text: "" });
-                                            const isCorrect = metadata.showAnswerLines === false && q.content.correctIndex === optI;
+                                            const isCorrect = metadata.showAnswers === true && q.content.correctIndex === optI;
                                             return new TextRun({
                                                 text: `  (${String.fromCharCode(97 + optI)}) ${opt}          `,
                                                 bold: isCorrect,
@@ -534,21 +534,21 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                             }
                         }
 
-                        if (metadata.showAnswerLines === false && q.content.solutionText) {
+                        if (metadata.showAnswers === true && q.content.solutionText) {
                             children.push(new Paragraph({
                                 children: [
                                     new TextRun({ text: `Solution: ${q.content.solutionText}`, italics: true, color: "008000", bold: true })
                                 ],
                                 spacing: { before: 100, after: 100 }
                             }));
-                        } else if (metadata.showAnswerLines === false && q.type === "TF" && typeof q.content.isTrue === 'boolean') {
+                        } else if (metadata.showAnswers === true && q.type === "TF" && typeof q.content.isTrue === 'boolean') {
                             children.push(new Paragraph({
                                 children: [
                                     new TextRun({ text: `Answer: ${q.content.isTrue ? "True" : "False"}`, italics: true, color: "008000", bold: true })
                                 ],
                                 spacing: { before: 100, after: 100 }
                             }));
-                        } else if (metadata.showAnswerLines === false && q.type === "MCQ" && typeof q.content.correctIndex === 'number' && q.content.options && q.content.options[q.content.correctIndex]) {
+                        } else if (metadata.showAnswers === true && q.type === "MCQ" && typeof q.content.correctIndex === 'number' && q.content.options && q.content.options[q.content.correctIndex]) {
                             children.push(new Paragraph({
                                 children: [
                                     new TextRun({ text: `Answer: (${String.fromCharCode(97 + q.content.correctIndex)}) ${q.content.options[q.content.correctIndex]}`, italics: true, color: "008000", bold: true })

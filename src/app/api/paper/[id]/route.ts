@@ -66,12 +66,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                     examName: metadata.examName || "Untitled Exam",
                     totalMarks: Number(metadata.totalMarks) || 100,
                     date: paperDate,
-                    layoutSettings: {
-                        instructions: metadata.instructions || "",
-                        standard: metadata.standard || "",
-                        timeAllowed: metadata.timeAllowed || "",
-                        showStudentInfo: metadata.showStudentInfo !== false
-                    },
+                    timeLimit: metadata.timeLimit ? Number(metadata.timeLimit) : null,
+                    layoutSettings: (() => {
+                        const l = { ...metadata };
+                        ['schoolName', 'subject', 'examName', 'totalMarks', 'date', 'timeLimit', 'isPublishedOnline'].forEach(k => delete (l as any)[k]);
+                        l.instructions = metadata.instructions || "";
+                        l.standard = metadata.standard || "";
+                        l.timeAllowed = metadata.timeAllowed || "";
+                        l.showStudentInfo = metadata.showStudentInfo !== false;
+                        return l;
+                    })(),
                     questions: {
                         create: questions.map((q: any, index: number) => ({
                             type: q.type,

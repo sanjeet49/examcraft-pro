@@ -4,10 +4,10 @@ import { Paper, Question, StudentSubmission } from "@prisma/client";
 import "katex/dist/katex.min.css";
 import Latex from "react-latex-next";
 import { Button } from "@/components/ui/button";
-import { Printer, ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
+import { Printer, ArrowLeft, CheckCircle2, XCircle, Sparkles, Loader2, AlertCircle } from "lucide-react";
 import dayjs from "dayjs";
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function StudentReportView({ 
     paper, 
@@ -24,6 +24,31 @@ export default function StudentReportView({
             });
         }
     }, []);
+
+    const [aiFeedback, setAiFeedback] = useState<Record<string, any>>((submission as any).aiFeedback as Record<string, any> || {});
+    const [gradingState, setGradingState] = useState<Record<string, boolean>>({});
+
+    const handleGradeWithAI = async (questionId: string) => {
+        setGradingState(prev => ({ ...prev, [questionId]: true }));
+        try {
+            const res = await fetch('/api/ai/grade-descriptive', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ submissionId: submission.id, questionId })
+            });
+            const data = await res.json();
+            if (data.success && data.feedback) {
+                setAiFeedback(prev => ({ ...prev, [questionId]: data.feedback }));
+            } else {
+                alert(data.error || 'Failed to grade');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('An error occurred during AI grading');
+        } finally {
+            setGradingState(prev => ({ ...prev, [questionId]: false }));
+        }
+    };
 
     const handlePrint = () => {
         window.print();
@@ -58,8 +83,15 @@ export default function StudentReportView({
                 <div className="bg-gray-50 print:bg-transparent print:border print:border-gray-200 rounded-xl p-6 mb-8 flex justify-between items-center">
                     <div>
                         <p className="text-sm text-gray-500 uppercase tracking-wider font-bold mb-1">Student Details</p>
-                        <p className="text-xl font-bold text-gray-900">{submission.studentName}</p>
-                        <p className="text-gray-600">Roll No: <span className="font-semibold">{submission.rollNo || "N/A"}</span> | Class: <span className="font-semibold">{submission.division || "N/A"}</span></p>
+                        <div className="flex items-center gap-3">
+                            <p className="text-xl font-bold text-gray-900">{submission.studentName}</p>
+                            {(submission.cheatWarnings ?? 0) > 0 && (
+                                <span className="flex items-center px-2 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700 border border-red-200">
+                                    <AlertCircle className="w-3 h-3 mr-1" /> Flagged: {submission.cheatWarnings} Tab Switches
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-gray-600 mt-1">Roll No: <span className="font-semibold">{submission.rollNo || "N/A"}</span> | Class: <span className="font-semibold">{submission.division || "N/A"}</span></p>
                         <p className="text-xs text-gray-400 mt-2">Submitted: {dayjs(submission.submittedAt).format("MMMM D, YYYY • h:mm A")}</p>
                     </div>
                     <div className="text-right bg-white p-4 rounded-lg shadow-sm print:shadow-none print:border print:border-gray-200">
@@ -192,12 +224,80 @@ export default function StudentReportView({
                                         </div>
                                     )}
 
+                                    {/* MATCH Rendering */}
+                                    {q.type === "MATCH" && (
+                                        <div className="mt-2 text-sm w-full">
+                                            <p className="font-semibold text-gray-500 mb-2">Student's Matching Selections:</p>
+                                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                                {typeof studentAnswer === 'object' && studentAnswer !== null ? (
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        {(content.pairs || []).map((pair: any, pIndex: number) => {
+                                                            const selectedLetter = studentAnswer[pIndex];
+                                                            const selectedIndex = selectedLetter ? selectedLetter.charCodeAt(0) - 97 : -1;
+                                                            const selectedRightText = selectedIndex !== -1 && content.pairs[selectedIndex] ? content.pairs[selectedIndex].right : "No selection";
+                                                            return (
+                                                                <div key={pIndex} className="flex flex-col p-3 bg-white rounded border border-gray-200 shadow-sm">
+                                                                    <div className="font-bold text-gray-700 text-sm mb-1">{pIndex + 1}. <Latex>{pair.left || ""}</Latex></div>
+                                                                    <div className="flex items-start text-indigo-700 bg-indigo-50/50 p-2 rounded text-xs gap-2">
+                                                                        <span className="font-bold shrink-0">&rarr;</span> 
+                                                                        <span className="font-extrabold shrink-0">{selectedLetter ? `(${selectedLetter})` : '(No Match)'}</span>
+                                                                        <span className="text-gray-700 font-medium break-words"><Latex>{selectedRightText || ""}</Latex></span>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">No valid matching mapped. {typeof studentAnswer === 'string' ? studentAnswer : ''}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* DATA_TABLE Rendering */}
+                                    {q.type === "DATA_TABLE" && (
+                                        <div className="mt-2 text-sm w-full">
+                                            <p className="font-semibold text-gray-500 mb-2">Student's Data Analysis:</p>
+                                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-gray-800 whitespace-pre-wrap min-h-[60px]">
+                                                {typeof studentAnswer === 'number' 
+                                                    ? `Selected Option: ${String.fromCharCode(65 + studentAnswer)}` 
+                                                    : (typeof studentAnswer === 'string' ? studentAnswer : <span className="text-gray-400 italic">No response provided.</span>)
+                                                }
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Descriptive & Non-Auto Graded Types */}
-                                    {!isAutoGradable && (
+                                    {!isAutoGradable && q.type !== "MATCH" && q.type !== "DATA_TABLE" && (
                                         <div className="mt-2 text-sm">
                                             <p className="font-semibold text-gray-500 mb-1">Student's Response:</p>
                                             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-gray-800 whitespace-pre-wrap min-h-[60px]">
-                                                {studentAnswer || <span className="text-gray-400 italic">No response provided.</span>}
+                                                {typeof studentAnswer === 'string' ? studentAnswer : (studentAnswer !== undefined && studentAnswer !== null ? JSON.stringify(studentAnswer) : <span className="text-gray-400 italic">No response provided.</span>)}
+                                            </div>
+                                            
+                                            {/* AI Grading Module */}
+                                            <div className="mt-4 print:hidden">
+                                                {aiFeedback[q.id] ? (
+                                                    <div className="p-4 bg-fuchsia-50 rounded-xl border border-fuchsia-100">
+                                                        <div className="flex items-center gap-2 mb-2 text-fuchsia-800 font-bold">
+                                                            <Sparkles className="w-4 h-4" /> AI Grading Feedback
+                                                        </div>
+                                                        <p className="text-gray-700 text-sm mb-3 leading-relaxed">{aiFeedback[q.id].explanation}</p>
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-mono font-bold text-fuchsia-700 text-base">{aiFeedback[q.id].suggestedMarks} <span className="text-sm font-medium text-fuchsia-600/70">/ {q.marks} Marks</span></span>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <Button 
+                                                        variant="outline" 
+                                                        onClick={() => handleGradeWithAI(q.id)}
+                                                        disabled={gradingState[q.id] || !isStudentChoiceDefined(studentAnswer)}
+                                                        className="text-fuchsia-600 border-fuchsia-200 hover:bg-fuchsia-50 hover:text-fuchsia-700"
+                                                    >
+                                                        {gradingState[q.id] ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                                                        Grade with AI
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                     )}

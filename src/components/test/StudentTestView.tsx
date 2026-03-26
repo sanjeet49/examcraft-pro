@@ -9,7 +9,7 @@ import { Paper, Question } from "@prisma/client";
 import "katex/dist/katex.min.css";
 import Latex from "react-latex-next";
 import { Loader2, CheckCircle2, AlertCircle, BarChart3, Check, X, MinusCircle } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export default function StudentTestView({ paper }: { paper: Paper & { questions: Question[] } }) {
     // 0 = Login, 1 = Exam, 2 = Success/Report, 3 = Already Taken
@@ -24,6 +24,13 @@ export default function StudentTestView({ paper }: { paper: Paper & { questions:
     const [error, setError] = useState("");
     const [report, setReport] = useState<any>(null);
 
+    // Anti-Cheat & Timer States
+    const [cheatWarnings, setCheatWarnings] = useState(0);
+    const [timeLeft, setTimeLeft] = useState<number | null>(null);
+
+    const submitRef = useRef<() => void>(undefined);
+    const isSubmittingRef = useRef(false);
+
     // Check if already taken on mount
     useEffect(() => {
         if (typeof window !== "undefined") {
@@ -34,15 +41,6 @@ export default function StudentTestView({ paper }: { paper: Paper & { questions:
         }
     }, [paper.id]);
 
-    const handleStart = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!studentName.trim()) {
-            setError("Please enter your name to begin.");
-            return;
-        }
-        setError("");
-        setStep(1);
-    };
 
     const handleAnswerChange = (questionId: string, value: any) => {
         setResponses(prev => ({
@@ -52,7 +50,9 @@ export default function StudentTestView({ paper }: { paper: Paper & { questions:
     };
 
     const handleSubmitTest = async () => {
+        if (isSubmittingRef.current) return;
         setIsSubmitting(true);
+        isSubmittingRef.current = true;
         setError("");
         try {
             const res = await fetch(`/api/paper/${paper.id}/submit`, {
@@ -62,7 +62,8 @@ export default function StudentTestView({ paper }: { paper: Paper & { questions:
                     studentName,
                     rollNo,
                     division,
-                    responses
+                    responses,
+                    cheatWarnings
                 })
             });
 
@@ -79,14 +80,91 @@ export default function StudentTestView({ paper }: { paper: Paper & { questions:
             // Prevent retakes on this browser
             if (typeof window !== "undefined") {
                 localStorage.setItem(`exam_taken_${paper.id}`, "true");
+                // Exit fullscreen on finish
+                if (document.fullscreenElement) {
+                    document.exitFullscreen().catch(e => console.log(e));
+                }
             }
 
             setStep(2); // Success!
         } catch (err: any) {
             setError(err.message || "An error occurred during submission.");
+            isSubmittingRef.current = false;
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    submitRef.current = handleSubmitTest;
+
+    // Timer Initialization
+    useEffect(() => {
+        if (step === 1 && paper.timeLimit) {
+            setTimeLeft(paper.timeLimit * 60);
+        }
+    }, [step, paper.timeLimit]);
+
+    // Timer Countdown
+    useEffect(() => {
+        if (step === 1 && timeLeft !== null && timeLeft > 0) {
+            const timer = setInterval(() => {
+                setTimeLeft(prev => prev !== null ? prev - 1 : null);
+            }, 1000);
+            return () => clearInterval(timer);
+        } else if (step === 1 && timeLeft === 0) {
+            // Auto submit when time reaches 0
+            if (!isSubmittingRef.current) {
+                alert("Time is up! Your answers will be automatically submitted.");
+                submitRef.current?.();
+            }
+        }
+    }, [step, timeLeft]);
+
+    // Tab-Switching Detection (Anti-Cheat)
+    useEffect(() => {
+        if (step === 1) {
+            const handleVisibilityChange = () => {
+                if (document.hidden) {
+                    setCheatWarnings(prev => {
+                        const newWarnings = prev + 1;
+                        if (newWarnings >= 3) {
+                            alert("Auto-submitting exam due to multiple tab switches.");
+                            if (!isSubmittingRef.current) submitRef.current?.();
+                        } else {
+                            alert(`Warning ${newWarnings}/3: Tab switching is strictly prohibited! Do not leave the exam window.`);
+                        }
+                        return newWarnings;
+                    });
+                }
+            };
+            document.addEventListener("visibilitychange", handleVisibilityChange);
+            return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+        }
+    }, [step]);
+
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
+    const handleStart = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!studentName.trim()) {
+            setError("Please enter your name to begin.");
+            return;
+        }
+        setError("");
+        
+        try {
+            if (document.documentElement.requestFullscreen) {
+                await document.documentElement.requestFullscreen();
+            }
+        } catch (err) {
+            console.log("Fullscreen request failed or disabled.");
+        }
+
+        setStep(1);
     };
 
     if (step === 0) {
@@ -226,6 +304,16 @@ export default function StudentTestView({ paper }: { paper: Paper & { questions:
                     <h1 className="text-xl font-bold text-gray-900">{paper.examName}</h1>
                     <p className="text-sm text-gray-500">Candidate: <span className="font-semibold text-gray-700">{studentName} {rollNo ? `(${rollNo})` : ''}</span></p>
                 </div>
+
+                {timeLeft !== null && (
+                    <div className="flex flex-col items-center justify-center bg-indigo-50 px-6 py-2 rounded-lg border border-indigo-200">
+                        <div className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-0.5">Time Remaining</div>
+                        <div className={`font-mono text-3xl font-black ${timeLeft < 300 ? 'text-red-600 animate-pulse' : 'text-indigo-900'}`}>
+                            {formatTime(timeLeft)}
+                        </div>
+                    </div>
+                )}
+
                 <div className="text-right">
                     <div className="text-sm text-gray-500">Total Marks</div>
                     <div className="font-mono font-bold text-indigo-700 text-lg">{paper.totalMarks}</div>
@@ -336,9 +424,129 @@ export default function StudentTestView({ paper }: { paper: Paper & { questions:
                                         </div>
                                     )}
 
-                                    {/* Additional generic fallback for unimplemented UI types (Map, Match, Datatable etc) */}
-                                    {(q.type === "MAP" || q.type === "MATCH" || q.type === "DATA_TABLE") && (
-                                        <div className="mt-4">
+                                    {q.type === "MATCH" && (
+                                        <div className="mt-4 space-y-4 w-full">
+                                            {/* Render the matching layout natively for the student */}
+                                            <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                                <table className="w-full text-sm border-collapse bg-white">
+                                                    <thead>
+                                                        <tr>
+                                                            <th className="font-bold border-b border-gray-200 bg-gray-50 text-left py-2 px-3 w-1/2 text-gray-700">Column A</th>
+                                                            <th className="font-bold border-b border-gray-200 bg-gray-50 text-left py-2 px-4 w-1/2 text-gray-700">Column B</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {(content.pairs || []).map((pair: any, pIndex: number) => (
+                                                            <tr key={pIndex} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50">
+                                                                <td className="py-3 px-3 pr-4 text-gray-800 align-top">
+                                                                    <span className="font-semibold text-indigo-700 mr-2">{pIndex + 1}.</span> 
+                                                                    <Latex>{pair.left || ""}</Latex>
+                                                                </td>
+                                                                <td className="py-3 px-4 pl-4 text-gray-800 border-l border-gray-100 align-top">
+                                                                    <span className="font-semibold text-indigo-700 mr-2">({String.fromCharCode(97 + pIndex)})</span> 
+                                                                    <Latex>{pair.right || ""}</Latex>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* Interactive matching input grids */}
+                                            <div className="bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 mt-2">
+                                                <h4 className="text-sm font-semibold text-indigo-900 mb-3 flex items-center">
+                                                    Select your matches:
+                                                </h4>
+                                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                                                    {(content.pairs || []).map((_: any, pIndex: number) => (
+                                                        <div key={pIndex} className="flex items-center gap-2 bg-white px-3 py-2 rounded-md border border-gray-200 shadow-sm transition hover:border-indigo-300">
+                                                            <span className="font-bold text-gray-700 w-8">{pIndex + 1} &rarr;</span>
+                                                            <select
+                                                                className="flex-1 bg-transparent outline-none text-indigo-700 font-bold cursor-pointer"
+                                                                value={(responses[q.id] && responses[q.id][pIndex]) || ""}
+                                                                onChange={(e) => {
+                                                                    const currentAnswers = responses[q.id] || {};
+                                                                    handleAnswerChange(q.id, {
+                                                                        ...currentAnswers,
+                                                                        [pIndex]: e.target.value
+                                                                    });
+                                                                }}
+                                                            >
+                                                                <option value="" disabled>-</option>
+                                                                {(content.pairs || []).map((_: any, optIndex: number) => {
+                                                                    const letter = String.fromCharCode(97 + optIndex);
+                                                                    return <option key={optIndex} value={letter}>{letter}</option>;
+                                                                })}
+                                                            </select>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {q.type === "DATA_TABLE" && (
+                                        <div className="mt-4 space-y-4 w-full">
+                                            {/* Render the data table for reading */}
+                                            <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                                <table className="w-full text-sm border-collapse bg-white text-center">
+                                                    <tbody>
+                                                        {(content.tableData || []).map((row: string[], rIndex: number) => (
+                                                            <tr key={rIndex} className="border-b border-gray-100 last:border-0">
+                                                                {row.map((cell: string, cIndex: number) => (
+                                                                    <td key={cIndex} className={`p-3 border-r border-gray-100 last:border-0 ${rIndex === 0 ? "font-bold bg-gray-50 text-gray-700" : "text-gray-600"}`}>
+                                                                        <Latex>{cell || ""}</Latex>
+                                                                    </td>
+                                                                ))}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* If there are MCQ options attached to the Data Table */}
+                                            {content.options && content.options.some((o: string) => o.trim() !== "") ? (
+                                                <div className="space-y-2 mt-4">
+                                                    {content.options.map((opt: string, optIndex: number) => (
+                                                        <label 
+                                                            key={optIndex} 
+                                                            className={`flex items-center p-3 rounded-lg border cursor-pointer transition-colors ${
+                                                                responses[q.id] === optIndex 
+                                                                ? 'border-indigo-500 bg-indigo-50' 
+                                                                : 'border-gray-200 hover:bg-gray-50'
+                                                            }`}
+                                                        >
+                                                            <input 
+                                                                type="radio" 
+                                                                name={`q_${q.id}`} 
+                                                                value={optIndex}
+                                                                checked={responses[q.id] === optIndex}
+                                                                onChange={() => handleAnswerChange(q.id, optIndex)}
+                                                                className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500 flex-shrink-0" 
+                                                            />
+                                                            <span className="ml-3 text-gray-700 flex-1">
+                                                                <Latex>{opt}</Latex>
+                                                            </span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                /* If it's a descriptive answer about the table */
+                                                <div className="mt-4">
+                                                    <Textarea 
+                                                        placeholder="Provide your answer or analysis based on the table data above..."
+                                                        className="min-h-[120px] resize-y text-base"
+                                                        value={responses[q.id] || ""}
+                                                        onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Additional generic fallback for unimplemented UI types (Map) */}
+                                    {q.type === "MAP" && (
+                                        <div className="mt-4 w-full">
                                             <Textarea 
                                                 placeholder="Provide your answer or explanation for this custom question here..."
                                                 className="min-h-[100px] text-base"

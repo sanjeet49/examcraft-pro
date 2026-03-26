@@ -43,6 +43,7 @@ function BuilderContent() {
     const [smartPasteText, setSmartPasteText] = useState("");
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
     const [isParsing, setIsParsing] = useState(false);
+    const [isGeneratingExam, setIsGeneratingExam] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [selectedQuestionType, setSelectedQuestionType] = useState<QuestionType>("MCQ");
     const [expandedSection, setExpandedSection] = useState<number>(0);
@@ -130,11 +131,13 @@ function BuilderContent() {
                             d = new Date(p.date).toISOString().split('T')[0];
                         }
                         setMetadata({
-                            schoolName: p.schoolName,
-                            subject: p.subject,
-                            examName: p.examName,
-                            totalMarks: p.totalMarks,
+                            ...(p.layoutSettings || {}),
+                            schoolName: p.schoolName || "",
+                            subject: p.subject || "",
+                            examName: p.examName || "",
+                            totalMarks: p.totalMarks || 100,
                             date: d,
+                            timeLimit: p.timeLimit || undefined,
                             instructions: p.layoutSettings?.instructions || "",
                             standard: p.layoutSettings?.standard || "",
                             timeAllowed: p.layoutSettings?.timeAllowed || "",
@@ -266,6 +269,70 @@ function BuilderContent() {
             toast.error(e.message || "AI Parsing failed. Please try adding manually.");
         } finally {
             setIsParsing(false);
+        }
+    };
+
+    const handleGenerateFullExam = async () => {
+        if (!smartPasteText.trim() && uploadFiles.length === 0) {
+            toast.error("Please provide instructions or upload a Syllabus/PDF first.");
+            return;
+        }
+
+        setIsGeneratingExam(true);
+        toast.info("AI is reading the document and writing a 50-mark Exam. This may take ~20 seconds...");
+
+        try {
+            const formData = new FormData();
+            formData.append("text", smartPasteText);
+            uploadFiles.forEach(file => {
+                formData.append("files", file);
+            });
+
+            const res = await fetch("/api/ai/generate-from-pdf", {
+                method: "POST",
+                body: formData,
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to generate exam");
+            }
+
+            if (data.questions && Array.isArray(data.questions)) {
+                // Determine a new Variant Letter (e.g. Set A)
+                setMetadata(prev => ({
+                    ...prev,
+                    examName: prev.examName ? prev.examName + " - Full Revision" : "Generated 50-Mark Exam",
+                    totalMarks: 50
+                }));
+
+                const newQuestions = data.questions.map((q: any, i: number) => ({
+                    ...q,
+                    id: generateId(),
+                    sequenceOrder: i + 1,
+                    marks: Number(q.marks) || 1
+                }));
+
+                // Instead of appending, we replace existing questions when generating a FULL exam
+                if (questions.length > 0) {
+                    if (window.confirm("This will replace your existing questions with a fresh 50-mark exam. Continue?")) {
+                        setQuestions(newQuestions);
+                        setExpandedSection(0);
+                    }
+                } else {
+                    setQuestions(newQuestions);
+                    setExpandedSection(0);
+                }
+                
+                toast.success(`Successfully hallucinated a 50-mark exam!`);
+                setSmartPasteText("");
+                update(); 
+            }
+        } catch (e: any) {
+            toast.error(e.message || "AI Extraction failed. Check the file type (PDF/Word).");
+        } finally {
+            setIsGeneratingExam(false);
         }
     };
 
@@ -520,6 +587,7 @@ function BuilderContent() {
         metadata.examName,
         metadata.subject,
         metadata.showAnswerLines,
+        metadata.showAnswers,
         metadata.isDyslexiaFriendly,
         metadata.headerTemplate,
         metadata.schoolLogoWidth,
@@ -677,6 +745,10 @@ function BuilderContent() {
                                     <Label>Time Allowed</Label>
                                     <Input name="timeAllowed" value={metadata.timeAllowed} onChange={handleMetadataChange} />
                                 </div>
+                                <div className="space-y-2">
+                                    <Label>Time Limit (Minutes)</Label>
+                                    <Input type="number" min="0" name="timeLimit" value={metadata.timeLimit || ""} onChange={handleMetadataChange} placeholder="e.g. 60 for 1 hr" />
+                                </div>
                                 <div className="space-y-2 col-span-2">
                                     <Label>Instructions (Optional)</Label>
                                     <Input name="instructions" value={metadata.instructions} onChange={handleMetadataChange} />
@@ -703,6 +775,18 @@ function BuilderContent() {
                                     />
                                     <Label htmlFor="showAnswerLinesCheckbox" className="font-medium text-gray-700 cursor-pointer">
                                         Allocate blank lines for answers on the printed paper
+                                    </Label>
+                                </div>
+                                <div className="col-span-2 flex items-center space-x-2 mt-2">
+                                    <input
+                                        type="checkbox"
+                                        id="showAnswersCheckbox"
+                                        checked={metadata.showAnswers === true}
+                                        onChange={(e) => setMetadata({ ...metadata, showAnswers: e.target.checked })}
+                                        className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-600 cursor-pointer"
+                                    />
+                                    <Label htmlFor="showAnswersCheckbox" className="font-medium text-gray-700 cursor-pointer">
+                                        Show Answers / Key on the printed paper
                                     </Label>
                                 </div>
                             </div>
@@ -838,10 +922,17 @@ function BuilderContent() {
                                 value={smartPasteText}
                                 onChange={(e) => setSmartPasteText(e.target.value)}
                             />
-                            <Button onClick={handleSmartPaste} disabled={isParsing} className="w-full bg-indigo-600 hover:bg-indigo-700">
-                                {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                                {isParsing ? "AI is Thinking..." : "Generate Magic Blocks"}
-                            </Button>
+                            
+                            <div className="flex gap-2 flex-col sm:flex-row">
+                                <Button onClick={handleSmartPaste} disabled={isParsing || isGeneratingExam} className="flex-1 bg-indigo-600 hover:bg-indigo-700">
+                                    {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                                    {isParsing ? "Extracting..." : "Extract Loose Questions"}
+                                </Button>
+                                <Button onClick={handleGenerateFullExam} disabled={isParsing || isGeneratingExam} className="flex-1 bg-fuchsia-600 hover:bg-fuchsia-700">
+                                    {isGeneratingExam ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                                    {isGeneratingExam ? "Writing Exam..." : "Generate 50-Mark Syllabus Exam"}
+                                </Button>
+                            </div>
                         </section>
 
                         {/* Phase B: Step 2 - Question Factory */}
@@ -1715,7 +1806,7 @@ function BuilderContent() {
                                                 return (
                                                     <div className={`grid ${gridClass} gap-y-1 gap-x-4 mt-1 ml-2 w-full text-[11pt]`}>
                                                         {(q.content.options || []).map((opt: string, optI: number) => {
-                                                            const isCorrect = metadata.showAnswerLines === false && typeof q.content.correctIndex === 'number' && q.content.correctIndex === optI;
+                                                            const isCorrect = metadata.showAnswers === true && typeof q.content.correctIndex === 'number' && q.content.correctIndex === optI;
                                                             return (
                                                                 <div key={optI} className={`flex items-start ${isCorrect ? 'bg-green-50 py-0.5 px-1 -ml-1 rounded' : ''}`}>
                                                                     <span className={`mr-2 whitespace-nowrap ${isCorrect ? 'font-bold text-green-700' : ''}`}>({String.fromCharCode(97 + optI)})</span>
@@ -1780,7 +1871,7 @@ function BuilderContent() {
                                                         return (
                                                             <div className={`grid ${gridClass} gap-y-1 gap-x-4 mt-1 ml-2 w-full text-[11pt]`}>
                                                                 {(q.content.options || []).map((opt: string, optI: number) => {
-                                                                    const isCorrect = metadata.showAnswerLines === false && typeof q.content.correctIndex === 'number' && q.content.correctIndex === optI;
+                                                                    const isCorrect = metadata.showAnswers === true && typeof q.content.correctIndex === 'number' && q.content.correctIndex === optI;
                                                                     return opt.trim() !== "" ? (
                                                                         <div key={optI} className={`flex items-start ${isCorrect ? 'bg-green-50 py-0.5 px-1 -ml-1 rounded' : ''}`}>
                                                                             <span className={`mr-2 whitespace-nowrap ${isCorrect ? 'font-bold text-green-700' : ''}`}>({String.fromCharCode(97 + optI)})</span>
@@ -1793,18 +1884,18 @@ function BuilderContent() {
                                                     })()}
                                                 </div>
                                             )}
-                                            {metadata.showAnswerLines === false && q.content.solutionText && (
+                                            {metadata.showAnswers === true && q.content.solutionText && (
                                                 <div className="mt-2 ml-4 p-2 bg-green-50 text-green-800 italic border-l-2 border-green-500 rounded text-[11pt]">
                                                     <span className="font-bold mr-1">Solution:</span>
                                                     {q.content.solutionText}
                                                 </div>
                                             )}
-                                            {metadata.showAnswerLines === false && q.type === "TF" && typeof q.content.isTrue === 'boolean' && (
+                                            {metadata.showAnswers === true && q.type === "TF" && typeof q.content.isTrue === 'boolean' && (
                                                 <div className="mt-1 ml-4 text-[11pt] font-bold text-green-700">
                                                     Answer: {q.content.isTrue ? "True" : "False"}
                                                 </div>
                                             )}
-                                            {metadata.showAnswerLines === false && q.type === "MCQ" && typeof q.content.correctIndex === 'number' && q.content.options && q.content.options[q.content.correctIndex] && (
+                                            {metadata.showAnswers === true && q.type === "MCQ" && typeof q.content.correctIndex === 'number' && q.content.options && q.content.options[q.content.correctIndex] && (
                                                 <div className="mt-1 ml-4 text-[11pt] font-bold text-green-700">
                                                     Answer: ({String.fromCharCode(97 + q.content.correctIndex)}) {q.content.options[q.content.correctIndex]}
                                                 </div>
@@ -2116,7 +2207,7 @@ function BuilderContent() {
                                                             return (
                                                                 <div className={`grid ${gridClass} gap-y-1 gap-x-4 mt-1 ml-2 w-full text-[11pt]`}>
                                                                     {(q.content.options || []).map((opt: string, optI: number) => {
-                                                                        const isCorrect = metadata.showAnswerLines === false && typeof q.content.correctIndex === 'number' && q.content.correctIndex === optI;
+                                                                        const isCorrect = metadata.showAnswers === true && typeof q.content.correctIndex === 'number' && q.content.correctIndex === optI;
                                                                         return (
                                                                             <div key={optI} className={`flex items-start ${isCorrect ? 'bg-green-50 py-0.5 px-1 -ml-1 rounded' : ''}`}>
                                                                                 <span className={`mr-2 whitespace-nowrap ${isCorrect ? 'font-bold text-green-700' : ''}`}>({String.fromCharCode(97 + optI)})</span>
@@ -2181,7 +2272,7 @@ function BuilderContent() {
                                                                     return (
                                                                         <div className={`grid ${gridClass} gap-y-1 gap-x-4 mt-1 ml-2 w-full text-[11pt]`}>
                                                                             {(q.content.options || []).map((opt: string, optI: number) => {
-                                                                                const isCorrect = metadata.showAnswerLines === false && typeof q.content.correctIndex === 'number' && q.content.correctIndex === optI;
+                                                                                const isCorrect = metadata.showAnswers === true && typeof q.content.correctIndex === 'number' && q.content.correctIndex === optI;
                                                                                 return opt.trim() !== "" ? (
                                                                                     <div key={optI} className={`flex items-start ${isCorrect ? 'bg-green-50 py-0.5 px-1 -ml-1 rounded' : ''}`}>
                                                                                         <span className={`mr-2 whitespace-nowrap ${isCorrect ? 'font-bold text-green-700' : ''}`}>({String.fromCharCode(97 + optI)})</span>
@@ -2194,18 +2285,18 @@ function BuilderContent() {
                                                                 })()}
                                                             </div>
                                                         )}
-                                                        {metadata.showAnswerLines === false && q.content.solutionText && (
+                                                        {metadata.showAnswers === true && q.content.solutionText && (
                                                             <div className="mt-2 ml-4 p-2 bg-green-50 text-green-800 italic border-l-2 border-green-500 rounded text-[11pt]">
                                                                 <span className="font-bold mr-1">Solution:</span>
                                                                 <Latex>{q.content.solutionText}</Latex>
                                                             </div>
                                                         )}
-                                                        {metadata.showAnswerLines === false && q.type === "TF" && typeof q.content.isTrue === 'boolean' && (
+                                                        {metadata.showAnswers === true && q.type === "TF" && typeof q.content.isTrue === 'boolean' && (
                                                             <div className="mt-1 ml-4 text-[11pt] font-bold text-green-700">
                                                                 Answer: {q.content.isTrue ? "True" : "False"}
                                                             </div>
                                                         )}
-                                                        {metadata.showAnswerLines === false && q.type === "MCQ" && typeof q.content.correctIndex === 'number' && q.content.options && q.content.options[q.content.correctIndex] && (
+                                                        {metadata.showAnswers === true && q.type === "MCQ" && typeof q.content.correctIndex === 'number' && q.content.options && q.content.options[q.content.correctIndex] && (
                                                             <div className="mt-1 ml-4 text-[11pt] font-bold text-green-700">
                                                                 Answer: ({String.fromCharCode(97 + q.content.correctIndex)}) <Latex>{q.content.options[q.content.correctIndex]}</Latex>
                                                             </div>
