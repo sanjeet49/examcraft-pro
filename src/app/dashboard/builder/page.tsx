@@ -603,7 +603,14 @@ function BuilderContent() {
 
     return (
         <div className="flex flex-col lg:flex-row lg:h-screen overflow-hidden bg-gray-100 print:block print:h-auto print:overflow-visible print:bg-white">
-            <AILoadingOverlay isVisible={isParsing} />
+            <AILoadingOverlay
+                isVisible={isParsing || isGeneratingExam}
+                message={
+                    isGeneratingExam
+                        ? `AI is reading your syllabus and writing a ${targetMarks}-mark exam. This may take 20–40 seconds...`
+                        : "AI is extracting and structuring your questions. Just a moment..."
+                }
+            />
 
             {/* Mobile Tab Bar */}
             <div className="lg:hidden sticky top-0 z-30 flex bg-white border-b border-gray-200 print:hidden">

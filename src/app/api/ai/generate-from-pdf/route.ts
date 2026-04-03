@@ -128,7 +128,6 @@ CRITICAL: Return STRICTLY in the following JSON array schema (no markdown, no te
 `;
 
         // ── Call Gemini with all parts ─────────────────────────────────────────────
-        const aiClient = getAI();
         const allParts: ContentPart[] = [
             ...(hasReference ? [{ text: "REFERENCE PAPER (for structure only — do not copy questions):\n" } as ContentPart, ...referenceParts] : []),
             { text: "SYLLABUS / CHAPTER MATERIAL (use this for question content):\n" },
@@ -149,9 +148,9 @@ Allowed types: MCQ, TF, SHORT_ANSWER, DESCRIPTIVE, FILL_IN_THE_BLANKS.
         const response = await withRetry(() =>
             aiClient.models.generateContent({
                 model: "gemini-2.5-flash",
-                systemInstruction,
                 contents: [{ role: "user", parts: allParts }],
                 config: {
+                    systemInstruction,
                     responseMimeType: "application/json",
                     thinkingConfig: { thinkingBudget: 4096 },
                 },
