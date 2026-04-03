@@ -1,131 +1,191 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
+import { getAI, withRetry, quotaErrorResponse } from "@/lib/gemini";
 import mammoth from "mammoth";
-const pdfParse = require("pdf-parse");
 
 export const dynamic = "force-dynamic";
-
-let ai: GoogleGenAI | null = null;
-const getAI = () => {
-    if (!ai) {
-        ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "dummy-key-for-build" });
-    }
-    return ai;
-};
 
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions);
-        if (!session || !session.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        if (!session || !session.user)
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
         const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-        if (!user || user.credits <= 0) return NextResponse.json({ error: "Insufficient credits." }, { status: 403 });
+        if (!user || user.credits <= 0)
+            return NextResponse.json({ error: "Insufficient credits." }, { status: 403 });
 
         const formData = await req.formData();
-        const textContext = formData.get("text") as string;
-        const uploadFiles = formData.getAll("files") as File[];
+        const textContext = (formData.get("text") as string) || "";
+        const syllabusFiles = formData.getAll("files") as File[];
+        const referenceFilesList = formData.getAll("referenceFiles") as File[];
+        const targetMarksRaw = formData.get("targetMarks") as string;
+        const targetMarks = parseInt(targetMarksRaw, 10) || 50;
 
-        if (!textContext && uploadFiles.length === 0) {
-            return NextResponse.json({ error: "Please provide a document or syllabus text." }, { status: 400 });
+        if (!textContext && syllabusFiles.length === 0) {
+            return NextResponse.json(
+                { error: "Please provide a chapter PDF, DOCX, or paste text." },
+                { status: 400 }
+            );
         }
 
-        let combinedContext = textContext ? `Additional Instructions/Context:\n${textContext}\n\n` : "";
+        // ── Build Gemini content parts ────────────────────────────────────────────
+        // Gemini can read PDFs natively via inline base64 — no PDF library needed.
+        // DOCX files are extracted to plain text via mammoth.
+        type ContentPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+        const syllabusParts: ContentPart[] = [];
+        const referenceParts: ContentPart[] = [];
 
-        for (const file of uploadFiles) {
+        const fileToGeminiParts = async (file: File): Promise<ContentPart[]> => {
             const arrayBuffer = await file.arrayBuffer();
             const buffer = Buffer.from(arrayBuffer);
+            const isDocx =
+                file.name.endsWith(".docx") ||
+                file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            const isPdf = file.name.endsWith(".pdf") || file.type === "application/pdf";
 
-            if (file.name.endsWith('.docx') || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-                try {
-                    const result = await mammoth.extractRawText({ buffer });
-                    combinedContext += `--- Extracted Docx Text from ${file.name} ---\n${result.value}\n-----------------------------------\n\n`;
-                } catch (e) {
-                    console.error("Mammoth extraction failed:", e);
-                    return NextResponse.json({ error: `Failed to extract text from DOCX: ${file.name}` }, { status: 400 });
-                }
-            } else if (file.name.endsWith('.pdf') || file.type === 'application/pdf') {
-                try {
-                    const data = await pdfParse(buffer);
-                    combinedContext += `--- Extracted PDF Text from ${file.name} ---\n${data.text}\n-----------------------------------\n\n`;
-                } catch (e) {
-                    console.error("PDF-parse extraction failed:", e);
-                    return NextResponse.json({ error: `Failed to extract text from PDF: ${file.name}` }, { status: 400 });
-                }
+            if (isDocx) {
+                // Extract DOCX to plain text
+                const result = await mammoth.extractRawText({ buffer });
+                return [{ text: `--- Document: ${file.name} ---\n${result.value}\n---\n\n` }];
+            } else if (isPdf) {
+                // Send PDF directly to Gemini as base64 — Gemini reads it natively
+                return [
+                    { text: `--- Document: ${file.name} ---\n` },
+                    { inlineData: { mimeType: "application/pdf", data: buffer.toString("base64") } },
+                    { text: "\n---\n\n" },
+                ];
             } else {
-                 return NextResponse.json({ error: `Unsupported file type for full exam generation: ${file.name}. Please upload PDF or DOCX.` }, { status: 400 });
+                throw new Error(`Unsupported file type: ${file.name}. Please upload PDF or DOCX.`);
+            }
+        };
+
+        for (const file of syllabusFiles) {
+            try {
+                const parts = await fileToGeminiParts(file);
+                syllabusParts.push(...parts);
+            } catch (e: any) {
+                return NextResponse.json({ error: e.message }, { status: 400 });
             }
         }
 
-        const prompt = `
-Act as an expert exam setter. 
-Using exactly the provided syllabus text, generate a perfectly balanced 50-mark examination paper.
-The exam must include a logical mix of:
-- 10 MCQs (1 mark each = 10 marks)
-- 5 Fill-in-the-blanks (1 mark each = 5 marks) 
-- 5 True/False questions (1 mark each = 5 marks)
-- 5 Short Answer questions (2 marks each = 10 marks)
-- 4 Descriptive/Long Answer questions (5 marks each = 20 marks)
-TOTAL: 50 Marks.
+        for (const file of referenceFilesList) {
+            try {
+                const parts = await fileToGeminiParts(file);
+                referenceParts.push(...parts);
+            } catch (e: any) {
+                return NextResponse.json({ error: e.message }, { status: 400 });
+            }
+        }
 
-Syllabus / Source Material:
-${combinedContext}
+        const hasReference = referenceParts.length > 0;
 
-CRITICAL: Return strictly in the following JSON array schema (no markdown formatting outside of the array).
-Each object represents a question inside a section grouped by type:
+        // ── Build the prompt ──────────────────────────────────────────────────────
+        const styleInstructions = hasReference
+            ? `
+You have been given a REFERENCE PAPER above.
+Analyse it carefully and identify its structural blueprint:
+  - Section names, question types per section, number of questions, marks per question
+  - Overall tone (board-exam style, university style, etc.)
+
+Now generate a brand-new ${targetMarks}-mark examination paper that:
+  1. STRICTLY replicates the Reference Paper's structural blueprint.
+  2. Scales proportionally if Reference Paper's total marks differ from ${targetMarks}.
+  3. Sources ALL question content EXCLUSIVELY from the Syllabus material — do NOT reuse Reference Paper questions.
+`
+            : `
+Generate a perfectly balanced ${targetMarks}-mark examination paper using the provided syllabus.
+Include a logical mix of MCQs, Fill-in-the-Blanks, True/False, Short Answer, and Descriptive questions totalling exactly ${targetMarks} marks.
+`;
+
+        const promptText = `
+Act as an expert exam setter.
+
+${styleInstructions}
+
+CRITICAL: Return STRICTLY in the following JSON array schema (no markdown, no text outside the array):
 
 [
     {
-        "id": "gen-random-string",
-        "type": "ONE_OF_TYPES (MCQ, TF, SHORT_ANSWER, DESCRIPTIVE, FILL_IN_THE_BLANKS)",
+        "id": "gen-abc123",
+        "type": "MCQ | TF | SHORT_ANSWER | DESCRIPTIVE | FILL_IN_THE_BLANKS",
         "marks": number,
         "sequenceOrder": number,
-        "sectionHeading": "string (e.g., 'Section A: Multiple Choice')",
-        "customHeading": "string (e.g., 'Tick the correct option')",
+        "sectionHeading": "Section A: Multiple Choice Questions",
+        "customHeading": "Choose the correct option",
         "content": {
-            // if MCQ: "questionText": string, "options": string[], "correctIndex": number, "solutionText": string
-            // if TF: "questionText": string, "isTrue": boolean, "solutionText": string
-            // if SHORT_ANSWER: "questionText": string, "linesRequired": 3, "solutionText": string
-            // if DESCRIPTIVE: "questionText": string, "linesRequired": 8, "solutionText": string
-            // if FILL_IN_THE_BLANKS: "questionText": string (use "___" for blank), "solutionText": string
+            "questionText": "...",
+            "options": ["...", "..."],
+            "correctIndex": 0,
+            "isTrue": true,
+            "linesRequired": 3,
+            "solutionText": "..."
         }
     }
 ]
 `;
 
+        // ── Call Gemini with all parts ─────────────────────────────────────────────
         const aiClient = getAI();
-        const response = await aiClient.models.generateContent({
-            // Using gemini-2.5-pro for high-reasoning full document exam synthesis
-            model: "gemini-2.5-pro",
-            contents: prompt,
-            config: { responseMimeType: "application/json" }
-        });
+        const allParts: ContentPart[] = [
+            ...(hasReference ? [{ text: "REFERENCE PAPER (for structure only — do not copy questions):\n" } as ContentPart, ...referenceParts] : []),
+            { text: "SYLLABUS / CHAPTER MATERIAL (use this for question content):\n" },
+            ...(textContext ? [{ text: textContext + "\n\n" } as ContentPart] : []),
+            ...syllabusParts,
+            { text: promptText },
+        ];
+
+        const systemInstruction = `
+You are an expert exam setter on the ExamCraft Pro platform.
+Your ONLY output must be a valid JSON array of question objects, with no markdown, no explanation, and no text outside the array.
+Every question must have marks > 0. sequenceOrder starts at 1.
+JSON schema per question: { id, type, marks, sequenceOrder, sectionHeading, customHeading, content: { questionText, options, correctIndex, isTrue, linesRequired, solutionText } }
+Allowed types: MCQ, TF, SHORT_ANSWER, DESCRIPTIVE, FILL_IN_THE_BLANKS.
+`.trim();
+
+        const aiClient = getAI();
+        const response = await withRetry(() =>
+            aiClient.models.generateContent({
+                model: "gemini-2.5-flash",
+                systemInstruction,
+                contents: [{ role: "user", parts: allParts }],
+                config: {
+                    responseMimeType: "application/json",
+                    thinkingConfig: { thinkingBudget: 4096 },
+                },
+            })
+        );
 
         const output = response.text || "[]";
-        let cleanedOutput = output;
-        if (cleanedOutput.startsWith("\`\`\`json")) cleanedOutput = cleanedOutput.replace(/^\`\`\`json\n/, "").replace(/\n\`\`\`$/, "");
-        else if (cleanedOutput.startsWith("\`\`\`")) cleanedOutput = cleanedOutput.replace(/^\`\`\`\n/, "").replace(/\n\`\`\`$/, "");
+        let cleaned = output.trim();
+        if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
+        if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
+        if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+        cleaned = cleaned.trim();
 
-        const parsedQuestions = JSON.parse(cleanedOutput.trim());
+        const parsedQuestions = JSON.parse(cleaned);
 
         await prisma.user.update({
             where: { id: session.user.id },
-            data: { credits: { decrement: 1 } }
+            data: { credits: { decrement: 1 } },
         });
 
         return NextResponse.json({ success: true, questions: parsedQuestions });
-
     } catch (error: any) {
         console.error("Generate Exam Failed:", error);
-        
+
         if (error?.status === 429 || error?.message?.includes("429") || error?.message?.includes("quota")) {
-            return NextResponse.json({
-                error: "Google AI Free Tier Limit Reached. Please wait a minute or upgrade API key."
-            }, { status: 429 });
+            return NextResponse.json(
+                { error: "Google AI quota reached. Please wait a minute and try again." },
+                { status: 429 }
+            );
         }
 
-        return NextResponse.json({ error: "Failed to generate exam from PDF." }, { status: 500 });
+        return NextResponse.json(
+            { error: error.message || "Failed to generate exam." },
+            { status: 500 }
+        );
     }
 }

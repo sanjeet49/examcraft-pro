@@ -15,6 +15,20 @@ export default async function DashboardPage() {
     const papers = session?.user?.id
         ? await prisma.paper.findMany({
             where: { userId: session.user.id },
+            select: {
+                id: true,
+                userId: true,
+                schoolName: true,
+                subject: true,
+                examName: true,
+                totalMarks: true,
+                date: true,
+                timeLimit: true,
+                status: true,
+                isPublishedOnline: true,
+                createdAt: true,
+                updatedAt: true,
+            },
             orderBy: { createdAt: 'desc' },
             take: 6
         })

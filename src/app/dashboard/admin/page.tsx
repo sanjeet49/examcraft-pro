@@ -29,8 +29,17 @@ export default async function AdminDashboardPage() {
         where: {
             status: isSuperAdmin ? { in: ["PENDING_ADMIN", "PENDING_SUPERADMIN"] } : "PENDING_ADMIN"
         },
-        include: {
-            user: true
+        select: {
+            id: true,
+            examName: true,
+            subject: true,
+            status: true,
+            user: {
+                select: {
+                    name: true,
+                    email: true,
+                }
+            }
         },
         orderBy: { updatedAt: 'desc' }
     });

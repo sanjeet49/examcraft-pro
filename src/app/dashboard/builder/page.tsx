@@ -41,7 +41,9 @@ function BuilderContent() {
 
     const [questions, setQuestions] = useState<Question[]>([]);
     const [smartPasteText, setSmartPasteText] = useState("");
+    const [targetMarks, setTargetMarks] = useState<number>(50);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+    const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
     const [isParsing, setIsParsing] = useState(false);
     const [isGeneratingExam, setIsGeneratingExam] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -279,13 +281,17 @@ function BuilderContent() {
         }
 
         setIsGeneratingExam(true);
-        toast.info("AI is reading the document and writing a 50-mark Exam. This may take ~20 seconds...");
+        toast.info(`AI is reading the document and writing a ${targetMarks}-mark Exam. This may take ~20 seconds...`);
 
         try {
             const formData = new FormData();
             formData.append("text", smartPasteText);
+            formData.append("targetMarks", targetMarks.toString());
             uploadFiles.forEach(file => {
                 formData.append("files", file);
+            });
+            referenceFiles.forEach(file => {
+                formData.append("referenceFiles", file);
             });
 
             const res = await fetch("/api/ai/generate-from-pdf", {
@@ -303,8 +309,8 @@ function BuilderContent() {
                 // Determine a new Variant Letter (e.g. Set A)
                 setMetadata(prev => ({
                     ...prev,
-                    examName: prev.examName ? prev.examName + " - Full Revision" : "Generated 50-Mark Exam",
-                    totalMarks: 50
+                    examName: prev.examName ? prev.examName + " - Full Revision" : `Generated ${targetMarks}-Mark Exam`,
+                    totalMarks: targetMarks
                 }));
 
                 const newQuestions = data.questions.map((q: any, i: number) => ({
@@ -316,7 +322,7 @@ function BuilderContent() {
 
                 // Instead of appending, we replace existing questions when generating a FULL exam
                 if (questions.length > 0) {
-                    if (window.confirm("This will replace your existing questions with a fresh 50-mark exam. Continue?")) {
+                    if (window.confirm(`This will replace your existing questions with a fresh ${targetMarks}-mark exam. Continue?`)) {
                         setQuestions(newQuestions);
                         setExpandedSection(0);
                     }
@@ -325,7 +331,7 @@ function BuilderContent() {
                     setExpandedSection(0);
                 }
                 
-                toast.success(`Successfully hallucinated a 50-mark exam!`);
+                toast.success(`Successfully hallucinated a ${targetMarks}-mark exam!`);
                 setSmartPasteText("");
                 update(); 
             }
@@ -902,16 +908,33 @@ function BuilderContent() {
                             <p className="text-sm text-indigo-700 mb-4">Paste your raw text, upload a PDF book, upload a Word document, or upload photos of test papers to let our Gemini AI extract and structure the questions automatically.</p>
 
                             <div className="mb-4">
-                                <Label className="text-indigo-800 font-semibold mb-1 block">Upload PDFs, Word Docs, or Images</Label>
+                                <Label className="text-indigo-800 font-semibold mb-1 block">📄 Chapter / Syllabus PDF</Label>
                                 <Input
                                     type="file"
-                                    accept="application/pdf,image/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                    accept="application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                     multiple
                                     className="bg-white border-indigo-200 cursor-pointer"
                                     onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
                                 />
                                 {uploadFiles.length > 0 && (
-                                    <p className="text-xs text-indigo-500 mt-1">{uploadFiles.length} file(s) selected</p>
+                                    <p className="text-xs text-indigo-500 mt-1">{uploadFiles.length} syllabus file(s) selected</p>
+                                )}
+                            </div>
+
+                            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                                <Label className="text-amber-800 font-semibold mb-1 block">🎯 Reference Paper Style <span className="font-normal text-amber-600">(Optional — paste a past paper to mimic its format)</span></Label>
+                                <Input
+                                    type="file"
+                                    accept="application/pdf,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                    multiple
+                                    className="bg-white border-amber-200 cursor-pointer"
+                                    onChange={(e) => setReferenceFiles(Array.from(e.target.files || []))}
+                                />
+                                {referenceFiles.length > 0 && (
+                                    <p className="text-xs text-amber-600 mt-1">✅ {referenceFiles.length} reference paper(s) uploaded — AI will mimic this structure</p>
+                                )}
+                                {referenceFiles.length === 0 && (
+                                    <p className="text-xs text-amber-500 mt-1">No reference paper — AI will use a balanced default structure</p>
                                 )}
                             </div>
 
@@ -923,6 +946,19 @@ function BuilderContent() {
                                 onChange={(e) => setSmartPasteText(e.target.value)}
                             />
                             
+                            <div className="flex gap-2 flex-col sm:flex-row items-end mb-3">
+                                <div className="w-full sm:w-1/3">
+                                    <Label className="text-indigo-800 font-semibold mb-1 block">Exam Target Marks</Label>
+                                    <Input 
+                                        type="number" 
+                                        value={targetMarks} 
+                                        onChange={(e) => setTargetMarks(Number(e.target.value) || 50)} 
+                                        className="bg-white border-indigo-200"
+                                        min={5}
+                                    />
+                                </div>
+                            </div>
+                            
                             <div className="flex gap-2 flex-col sm:flex-row">
                                 <Button onClick={handleSmartPaste} disabled={isParsing || isGeneratingExam} className="flex-1 bg-indigo-600 hover:bg-indigo-700">
                                     {isParsing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
@@ -930,7 +966,7 @@ function BuilderContent() {
                                 </Button>
                                 <Button onClick={handleGenerateFullExam} disabled={isParsing || isGeneratingExam} className="flex-1 bg-fuchsia-600 hover:bg-fuchsia-700">
                                     {isGeneratingExam ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
-                                    {isGeneratingExam ? "Writing Exam..." : "Generate 50-Mark Syllabus Exam"}
+                                    {isGeneratingExam ? "Writing Exam..." : `Generate ${targetMarks}-Mark Syllabus Exam`}
                                 </Button>
                             </div>
                         </section>
