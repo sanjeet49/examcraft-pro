@@ -22,6 +22,13 @@ import Latex from "react-latex-next";
 // Mock implementation of a simple unique ID generator
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+// Ensure every question from AI / DB always has a valid content object
+const normalizeQuestion = (q: any, overrides: Record<string, any> = {}) => ({
+    ...q,
+    ...overrides,
+    content: q.content && typeof q.content === "object" ? q.content : { questionText: "" },
+});
+
 function BuilderContent() {
     const { update } = useSession();
     const searchParams = useSearchParams();
@@ -146,7 +153,7 @@ function BuilderContent() {
                             showStudentInfo: p.layoutSettings?.showStudentInfo !== false,
                             isPublishedOnline: p.isPublishedOnline || false
                         });
-                        setQuestions(p.questions || []);
+                        setQuestions((p.questions || []).map((q: any) => normalizeQuestion(q)));
                         setStatus(p.status || "DRAFT");
                     }
                 })
@@ -256,12 +263,13 @@ function BuilderContent() {
             if (data.questions && Array.isArray(data.questions)) {
                 setQuestions((prev) => [
                     ...prev,
-                    ...data.questions.map((q: any, i: number) => ({
-                        ...q,
-                        id: generateId(),
-                        marks: Number(q.marks) || 1,
-                        sequenceOrder: prev.length + i + 1
-                    }))
+                    ...data.questions.map((q: any, i: number) =>
+                        normalizeQuestion(q, {
+                            id: generateId(),
+                            marks: Number(q.marks) || 1,
+                            sequenceOrder: prev.length + i + 1,
+                        })
+                    )
                 ]);
                 toast.success(`Successfully parsed ${data.questions.length} questions!`);
                 setSmartPasteText("");
@@ -313,12 +321,13 @@ function BuilderContent() {
                     totalMarks: targetMarks
                 }));
 
-                const newQuestions = data.questions.map((q: any, i: number) => ({
-                    ...q,
-                    id: generateId(),
-                    sequenceOrder: i + 1,
-                    marks: Number(q.marks) || 1
-                }));
+                const newQuestions = data.questions.map((q: any, i: number) =>
+                    normalizeQuestion(q, {
+                        id: generateId(),
+                        sequenceOrder: i + 1,
+                        marks: Number(q.marks) || 1,
+                    })
+                );
 
                 // Instead of appending, we replace existing questions when generating a FULL exam
                 if (questions.length > 0) {
@@ -1095,7 +1104,7 @@ function BuilderContent() {
                                                                         <Label>Question Content</Label>
                                                                         <Textarea
                                                                             placeholder="Enter question text here..."
-                                                                            value={q.content.questionText || ""}
+                                                                            value={q.content?.questionText || ""}
                                                                             onChange={(e) => updateQuestion(q.id, { content: { ...q.content, questionText: e.target.value } })}
                                                                             className="resize-none"
                                                                             rows={2}

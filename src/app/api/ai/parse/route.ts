@@ -49,10 +49,19 @@ export async function POST(req: Request) {
             }
         }
 
-        if (text) parts.push({ text: `Raw Instructions from User:\n${text}` });
-        if (extractedDocxText) parts.push({ text: extractedDocxText });
+        // ── Pre-clean pasted text (strip citation markers from tools like Gemini Deep Research) ──
+        const cleanText = (raw: string) =>
+            raw
+                .replace(/\[cite_start\]/gi, "")
+                .replace(/\[cite_end\]/gi, "")
+                .replace(/\[cite:\s*[\d,\s]+\]/gi, "")
+                .replace(/\*\*\[cite:[^\]]*\]\*\*/gi, "")
+                .trim();
 
-        // ── System Instruction (Gemini 2.5 feature) ───────────────────────────────
+        if (text) parts.push({ text: `Raw Instructions from User:\n${cleanText(text)}` });
+        if (extractedDocxText) parts.push({ text: cleanText(extractedDocxText) });
+
+        // ── System Instruction ────────────────────────────────────────────────────
         const systemInstruction = `
 You are an expert AI exam extractor for teachers on the ExamCraft Pro platform.
 
@@ -61,47 +70,53 @@ You MUST follow every rule below with zero deviation.
 
 QUESTION TYPES allowed: MCQ, TF, DESCRIPTIVE, MATCH, MAP, FILL_IN_THE_BLANKS, DATA_TABLE, SHORT_ANSWER, LONG_ANSWER, CUSTOM.
 
+CLEANUP RULES (apply BEFORE anything else):
+- STRIP all citation/annotation markers such as [cite_start], [cite_end], [cite: N], [cite: N, M], **[cite: ...]**, etc. These are NOT part of the question.
+- STRIP any bold markdown wrappers (**text** → text) from question text.
+- STRIP any leading numbering like "1.", "Q1.", "Question 1:" from questionText — the sequence order number handles that.
+- The cleaned question text must read naturally as a student would see it.
+
 HEADING RULES:
-- Top-level section titles (e.g. "Section A", "ATHLETICS") → extract into "sectionHeading"
-- Sub-instructions beneath them (e.g. "Tick the correct option") → extract into "customHeading"
-- Propagate BOTH fields to every child question in that group
+- Top-level section titles (e.g. "Section A", "Section 1: Basics") → extract into "sectionHeading"
+- Sub-instructions beneath them (e.g. "Choose the correct option") → extract into "customHeading"
+- Propagate BOTH fields to every child question in that group.
 
 MARKS RULES:
-- Divide group marks evenly among children. Every question MUST have marks > 0 (except type CUSTOM).
+- Divide group marks evenly among children. Every question MUST have marks > 0 (except CUSTOM type).
 - Default to 1 mark if unspecified.
 
 CONTENT RULES:
-- MCQ options: strip letter/number prefixes (A., B), iv.) from options array
-- Fill-in-the-blank sentences: use "___" as the blank placeholder
-- MATCH sections: combine ALL pairs into ONE question object with pairs:[{left,right}]
-- DATA_TABLE: use tableData: string[][] for tabular data
-- Reading comprehension passages: use CUSTOM type with 0 marks
-- If an answer/solution is already visible in the text → place it in "solutionText"
-- For MCQs with a known correct answer → also set "correctIndex"
-- sequenceOrder starts at 1 and increments continuously
-- Math formulas: wrap in $...$ (inline) or $$...$$ (block) with double-escaped backslashes
+- MCQ options: strip letter/number prefixes (A., B), iv.) from the options array values.
+- Fill-in-the-blank sentences: use "___" as the blank placeholder.
+- MATCH sections: combine ALL pairs into ONE question object with pairs:[{left,right}].
+- DATA_TABLE: use tableData: string[][] for tabular data.
+- Reading comprehension passages: use CUSTOM type with 0 marks.
+- If an answer/solution is visible in the text → place it in "solutionText".
+- For MCQs with a known correct answer → also set "correctIndex" (0-based).
+- sequenceOrder starts at 1 and increments continuously across all sections.
+- Math formulas: wrap in $...$ (inline) or $$...$$ (block) with double-escaped backslashes.
 
-OUTPUT FORMAT: Return ONLY a valid JSON array. No markdown. No explanation. No extra text.
+OUTPUT FORMAT: Return ONLY a valid JSON array. No markdown fences. No explanation. No extra text outside the array.
 
-SCHEMA:
-[{
+SCHEMA per question object:
+{
   "id": "unique-string",
-  "type": "ONE_OF_TYPES",
+  "type": "ONE_OF_ALLOWED_TYPES",
   "marks": number,
   "sequenceOrder": number,
-  "sectionHeading": "optional string",
-  "customHeading": "optional string",
+  "sectionHeading": "optional string or null",
+  "customHeading": "optional string or null",
   "content": {
-    "questionText": "string",
-    "options": ["string"],
-    "correctIndex": number,
-    "isTrue": boolean,
-    "linesRequired": number,
+    "questionText": "clean question string with NO citation markers",
+    "options": ["option text only, no A/B/C prefix"],
+    "correctIndex": number_or_null,
+    "isTrue": boolean_or_null,
+    "linesRequired": number_or_null,
     "pairs": [{"left":"string","right":"string"}],
     "tableData": [["string"]],
-    "solutionText": "string"
+    "solutionText": "string or null"
   }
-}]
+}
 `.trim();
 
         // ── Call Gemini ───────────────────────────────────────────────────────────
@@ -109,11 +124,10 @@ SCHEMA:
         const response = await withRetry(() =>
             ai.models.generateContent({
                 model: "gemini-2.5-flash",
-                systemInstruction,
                 contents: [{ role: "user", parts }],
                 config: {
+                    systemInstruction,
                     responseMimeType: "application/json",
-                    // Thinking: allow moderate reasoning for complex exam layouts
                     thinkingConfig: { thinkingBudget: 2048 },
                 },
             })
