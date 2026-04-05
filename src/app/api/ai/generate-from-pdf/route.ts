@@ -13,9 +13,16 @@ export async function POST(req: Request) {
         if (!session || !session.user)
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-        const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-        if (!user || user.credits <= 0)
-            return NextResponse.json({ error: "Insufficient credits." }, { status: 403 });
+        const user = await prisma.user.findUnique({ 
+            where: { id: session.user.id },
+            include: { school: true }
+        });
+        let availableCredits = 0;
+        if (user?.role === "OWNER") availableCredits = 999999;
+        else if (user?.school) availableCredits = user.school.credits;
+
+        if (!user || availableCredits <= 0)
+            return NextResponse.json({ error: "Insufficient school credits." }, { status: 403 });
 
         const formData = await req.formData();
         const textContext = (formData.get("text") as string) || "";
@@ -166,10 +173,12 @@ Allowed types: MCQ, TF, SHORT_ANSWER, DESCRIPTIVE, FILL_IN_THE_BLANKS.
 
         const parsedQuestions = JSON.parse(cleaned);
 
-        await prisma.user.update({
-            where: { id: session.user.id },
-            data: { credits: { decrement: 1 } },
-        });
+        if (user.role !== "OWNER" && user.schoolId) {
+            await prisma.school.update({
+                where: { id: user.schoolId },
+                data: { credits: { decrement: 1 } },
+            });
+        }
 
         return NextResponse.json({ success: true, questions: parsedQuestions });
     } catch (error: any) {

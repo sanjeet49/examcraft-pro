@@ -8,6 +8,12 @@ declare module "next-auth" {
             isApproved: boolean;
             isPremium: boolean;
             credits: number;
+            schoolId: string | null;
+            displayId: string | null;
+            isActive: boolean;
+            phone?: string | null;
+            image?: string | null;
+            name?: string | null;
         } & DefaultSession["user"];
     }
 
@@ -16,5 +22,11 @@ declare module "next-auth" {
         isApproved: boolean;
         isPremium: boolean;
         credits: number;
+        schoolId?: string | null;
+        displayId?: string | null;
+        isActive?: boolean;
+        phone?: string | null;
+        image?: string | null;
+        name?: string | null;
     }
 }

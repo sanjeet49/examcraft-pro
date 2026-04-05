@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
   },
   "dependencies": {
     "@google/genai": "^1.42.0",
@@ -20,6 +24,7 @@
     "bcryptjs": "^3.0.3",
     "canvas": "^3.2.2",
     "class-variance-authority": "^0.7.1",
+    "cloudinary": "^2.9.0",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.20",
     "docx": "^9.5.3",
@@ -37,6 +42,7 @@
     "radix-ui": "^1.4.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-easy-crop": "^5.5.7",
     "react-hook-form": "^7.71.2",
     "react-latex-next": "^3.0.0",
     "sonner": "^2.0.7",

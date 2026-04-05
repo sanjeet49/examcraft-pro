@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { CheckCircle2, Loader2 } from "lucide-react";
 
 export function ApproveUserButton({ userId }: { userId: string }) {
     const [loading, setLoading] = useState(false);
@@ -13,16 +15,15 @@ export function ApproveUserButton({ userId }: { userId: string }) {
             const res = await fetch("/api/admin/users/approve", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userId })
+                body: JSON.stringify({ userId }),
             });
-            if (res.ok) {
-                router.refresh();
-            } else {
-                alert("Failed to approve user.");
-                setLoading(false);
-            }
-        } catch (e) {
-            console.error(e);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Failed to approve user");
+            toast.success("User approved!");
+            router.refresh();
+        } catch (err: any) {
+            toast.error(err.message || "Something went wrong");
+        } finally {
             setLoading(false);
         }
     };
@@ -31,8 +32,9 @@ export function ApproveUserButton({ userId }: { userId: string }) {
         <button
             onClick={handleApprove}
             disabled={loading}
-            className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:bg-indigo-400"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all disabled:opacity-50"
         >
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
             {loading ? "Approving..." : "Approve"}
         </button>
     );

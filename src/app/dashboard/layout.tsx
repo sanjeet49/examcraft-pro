@@ -2,20 +2,33 @@
 
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { LogOut, FileText, LayoutDashboard, PlusCircle, Settings, Coins, Menu, X } from "lucide-react";
+import { LogOut, FileText, LayoutDashboard, PlusCircle, Settings, Coins, Menu, X, ShieldAlert, Crown } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const { data: session } = useSession();
     const pathname = usePathname();
+    const router = useRouter();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+    const role = session?.user?.role;
+
+    // Hard-block OWNER from the tenant dashboard entirely
+    useEffect(() => {
+        if (role === "OWNER") {
+            router.replace("/owner/dashboard");
+        }
+    }, [role, router]);
 
     const navLinks = [
         { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
         { href: "/dashboard/builder", label: "New Paper", icon: PlusCircle },
+        ...(role === "ADMIN" || role === "SUPER_ADMIN"
+            ? (session?.user?.isApproved ? [{ href: "/dashboard/admin", label: "Admin Portal", icon: ShieldAlert }] : [])
+            : []),
         { href: "/dashboard/settings", label: "Settings", icon: Settings },
     ];
 
@@ -58,8 +71,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         </div>
                     </div>
                     <div className="flex items-center gap-3 px-2 mb-4">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold uppercase">
-                            {session?.user?.name?.[0] || session?.user?.email?.[0] || "U"}
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold uppercase overflow-hidden ring-2 ring-indigo-50">
+                            {session?.user?.image ? (
+                                <img src={session.user.image} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                <>{session?.user?.name?.[0] || session?.user?.email?.[0] || "U"}</>
+                            )}
                         </div>
                         <div className="overflow-hidden">
                             <p className="text-sm font-medium text-gray-900 truncate">{session?.user?.name || "Teacher"}</p>
@@ -115,8 +132,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     </nav>
                     <div className="px-4 pb-4 border-t border-gray-100 pt-3 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold uppercase text-sm">
-                                {session?.user?.name?.[0] || "U"}
+                            <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold uppercase text-sm overflow-hidden ring-2 ring-indigo-50">
+                                {session?.user?.image ? (
+                                    <img src={session.user.image} alt="Profile" className="w-full h-full object-cover" />
+                                ) : (
+                                    <>{session?.user?.name?.[0] || session?.user?.email?.[0] || "U"}</>
+                                )}
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-gray-900">{session?.user?.name || "Teacher"}</p>

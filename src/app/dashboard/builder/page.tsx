@@ -123,6 +123,14 @@ function BuilderContent() {
         return () => window.removeEventListener('resize', updateScale);
     }, []);
 
+    // Block unapproved users
+    useEffect(() => {
+        if (session?.user && !session.user.isApproved && session.user.role !== "OWNER") {
+            toast.error("Your account is pending approval. You cannot access the paper builder.");
+            router.replace("/dashboard");
+        }
+    }, [session, router]);
+
     const handleMetadataChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setMetadata((prev) => ({ ...prev, [name]: value }));

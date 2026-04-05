@@ -7,37 +7,88 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// School (tenant unit)
+model School {
+  id         String   @id @default(cuid())
+  name       String
+  address    String?  @db.Text
+  schoolCode String   @unique // e.g. "SCH-1001" - given to ADMIN/TEACHER on registration
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  // Billing and Features
+  isPremium  Boolean  @default(false)
+  credits    Int      @default(3)
+  
+  users      User[]
+  papers     Paper[]
+}
+
+// User
 model User {
   id            String    @id @default(cuid())
+  displayId     String?   @unique // Auto-generated: "ECP-1001"
   email         String    @unique
   password      String?
   name          String?
   image         String?
   emailVerified DateTime?
-  role          String    @default("TEACHER") // TEACHER, ADMIN, SUPER_ADMIN
-  isApproved    Boolean   @default(false)
-  isPremium     Boolean   @default(false)
-  credits       Int       @default(3)
-  papers        Paper[]
-  accounts      Account[]
-  sessions      Session[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+
+  // Role and Access
+  // Values: OWNER | SUPER_ADMIN | ADMIN | TEACHER
+  role       String  @default("TEACHER")
+  isApproved Boolean @default(false)
+  isActive   Boolean @default(true)
+
+  // School link (SUPER_ADMIN/ADMIN/TEACHER belong to a school; OWNER has none)
+  schoolId String?
+  school   School? @relation(fields: [schoolId], references: [id])
+
+  // KYC / Identity
+  phone            String?
+  employeeId       String?
+  idType           String? // AADHAR | PAN | PASSPORT | VOTER | DRIVING_LICENCE
+  idNumber         String?
+  idDocUrl         String? @db.Text
+  currentAddress   String? @db.Text
+  permanentAddress String? @db.Text
+
+  // Trusty / Guarantor (for ADMIN and TEACHER)
+  trustyName    String?
+  trustyPhone   String?
+  trustyEmail   String?
+  trustyAddress String? @db.Text
+
+  // Audit
+  approvedBy String?   // userId of approver
+  approvedAt DateTime?
+  revokedBy  String?   // userId of revoker
+  revokedAt  DateTime?
+
+  // Relations
+  papers    Paper[]
+  accounts  Account[]
+  sessions  Session[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([schoolId])
 }
 
 model Account {
-  id                 String  @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?  @db.Text
-  access_token       String?  @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?  @db.Text
-  session_state      String?
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -60,49 +111,58 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// Paper
 model Paper {
-  id             String     @id @default(cuid())
-  userId         String
-  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  schoolName     String
-  subject        String
-  examName       String
-  totalMarks     Int
-  date           DateTime
-  layoutSettings Json?
-  timeLimit         Int?                // Strict test time limit in minutes
-  status            String              @default("DRAFT") // DRAFT, PENDING_ADMIN, PENDING_SUPERADMIN, APPROVED, REJECTED
+  id                String              @id @default(cuid())
+  userId            String
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schoolId          String?
+  school            School?             @relation(fields: [schoolId], references: [id])
+  schoolName        String
+  subject           String
+  examName          String
+  totalMarks        Int
+  date              DateTime
+  layoutSettings    Json?
+  timeLimit         Int?
+  status            String              @default("DRAFT")
   isPublishedOnline Boolean             @default(false)
   questions         Question[]
   submissions       StudentSubmission[]
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
+
+  @@index([userId])
+  @@index([schoolId])
 }
 
 model StudentSubmission {
-  id          String   @id @default(cuid())
-  paperId     String
-  paper       Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
-  studentName String
-  rollNo      String?
-  division    String?
-  responses   Json     // Stores map of { questionId: answer_value }
-  totalScore  Float?
-  aiFeedback    Json?    // Caches Gemini explanations and suggested marks
-  cheatWarnings Int      @default(0) // Tracks tab switches and blurs
+  id            String   @id @default(cuid())
+  paperId       String
+  paper         Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  studentName   String
+  rollNo        String?
+  division      String?
+  responses     Json
+  totalScore    Float?
+  aiFeedback    Json?
+  cheatWarnings Int      @default(0)
   submittedAt   DateTime @default(now())
 }
 
 model Question {
-  id            String   @id @default(cuid())
-  paperId       String
-  paper         Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
-  type          String // MCQ, TF, DESCRIPTIVE, MATCH, MAP, FILL_IN_THE_BLANKS
-  content       Json
-  marks         Int
-  sequenceOrder Int
-  customHeading String?
-  hasOr         Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(cuid())
+  paperId        String
+  paper          Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  type           String
+  content        Json
+  marks          Int
+  sequenceOrder  Int
+  customHeading  String?
+  sectionHeading String?
+  hasOr          Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([paperId])
 }

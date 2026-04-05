@@ -20,7 +20,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             return NextResponse.json({ error: "Not found" }, { status: 404 });
         }
 
-        if (paper.userId !== session.user.id && session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN") {
+        const role = session.user.role;
+        const callerSchoolId = (session.user as any).schoolId as string | null;
+
+        // Owner can access all papers
+        // Admin/Super_Admin can access papers in their school
+        // Teachers can only access their own papers
+        if (role === "OWNER") {
+            // allow
+        } else if (role === "ADMIN" || role === "SUPER_ADMIN") {
+            if (paper.schoolId && callerSchoolId !== paper.schoolId) {
+                return NextResponse.json({ error: "Forbidden — paper in different school" }, { status: 403 });
+            }
+        } else if (paper.userId !== session.user.id) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
@@ -41,7 +53,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const existingPaper = await prisma.paper.findUnique({ where: { id } });
         if (!existingPaper) return NextResponse.json({ error: "Not found" }, { status: 404 });
-        if (existingPaper.userId !== session.user.id && session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN") {
+
+        const role = session.user.role;
+        const callerSchoolId = (session.user as any).schoolId as string | null;
+
+        if (role === "OWNER") {
+            // allow
+        } else if (role === "ADMIN" || role === "SUPER_ADMIN") {
+            if (existingPaper.schoolId && callerSchoolId !== existingPaper.schoolId) {
+                return NextResponse.json({ error: "Forbidden — paper in different school" }, { status: 403 });
+            }
+        } else if (existingPaper.userId !== session.user.id) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 
@@ -108,7 +130,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
         const existingPaper = await prisma.paper.findUnique({ where: { id } });
         if (!existingPaper) return NextResponse.json({ error: "Not found" }, { status: 404 });
-        if (existingPaper.userId !== session.user.id && session.user.role !== "ADMIN" && session.user.role !== "SUPER_ADMIN") {
+
+        const role = session.user.role;
+        const callerSchoolId = (session.user as any).schoolId as string | null;
+
+        if (role === "OWNER") {
+            // allow
+        } else if (role === "ADMIN" || role === "SUPER_ADMIN") {
+            if (existingPaper.schoolId && callerSchoolId !== existingPaper.schoolId) {
+                return NextResponse.json({ error: "Forbidden — paper in different school" }, { status: 403 });
+            }
+        } else if (existingPaper.userId !== session.user.id) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 

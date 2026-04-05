@@ -10,6 +10,14 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
+        // Block unapproved users at the API level
+        if (!session.user.isApproved && session.user.role !== "OWNER") {
+            return NextResponse.json(
+                { error: "Your account is pending approval. You cannot create papers yet." },
+                { status: 403 }
+            );
+        }
+
         const body = await req.json();
         const { metadata, questions } = body;
 
@@ -26,10 +34,14 @@ export async function POST(req: NextRequest) {
             }
         }
 
+        // Resolve schoolId from session
+        const schoolId = (session.user as any).schoolId as string | null ?? null;
+
         // Create paper and questions in a transaction
         const paper = await prisma.paper.create({
             data: {
                 userId: session.user.id,
+                schoolId: schoolId,
                 schoolName: metadata.schoolName || "Unnamed School",
                 subject: metadata.subject || "General",
                 examName: metadata.examName || "Untitled Exam",

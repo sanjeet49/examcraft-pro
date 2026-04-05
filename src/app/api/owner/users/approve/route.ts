@@ -2,17 +2,15 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
-import { requireRole, requireSameSchool, requireHigherRole, rbacErrorResponse, ForbiddenError } from "@/lib/rbac";
-import type { Session } from "next-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
     try {
-        const session = await getServerSession(authOptions) as Session | null;
-
-        // Must be ADMIN or SUPER_ADMIN (or OWNER)
-        requireRole(session, "ADMIN", "SUPER_ADMIN", "OWNER");
+        const session = await getServerSession(authOptions);
+        if (!session || session.user.role !== "OWNER") {
+            return NextResponse.json({ message: "Unauthorized — OWNER access required" }, { status: 403 });
+        }
 
         const { userId } = await req.json();
         if (!userId) {
@@ -21,35 +19,29 @@ export async function POST(req: Request) {
 
         const target = await prisma.user.findUnique({
             where: { id: userId },
-            select: { role: true, schoolId: true, isApproved: true }
+            select: { role: true, isApproved: true }
         });
 
         if (!target) {
             return NextResponse.json({ message: "User not found" }, { status: 404 });
         }
 
-        // School scope guard
-        if (target.schoolId) {
-            requireSameSchool(session, target.schoolId);
+        if (target.role !== "SUPER_ADMIN") {
+            return NextResponse.json({ message: "This endpoint only approves SUPER_ADMINs" }, { status: 400 });
         }
-
-        // Role hierarchy guard — you can only approve roles strictly below yours
-        requireHigherRole(session!.user.role, target.role);
 
         await prisma.user.update({
             where: { id: userId },
             data: {
                 isApproved: true,
-                approvedBy: session!.user.id,
+                approvedBy: session.user.id,
                 approvedAt: new Date(),
             }
         });
 
-        return NextResponse.json({ message: "User approved successfully" }, { status: 200 });
+        return NextResponse.json({ message: "Super Admin approved successfully" }, { status: 200 });
     } catch (error) {
-        const rbacRes = rbacErrorResponse(error);
-        if (rbacRes) return rbacRes;
-        console.error("Approve error:", error);
+        console.error("Owner approve error:", error);
         return NextResponse.json({ message: "Internal server error" }, { status: 500 });
     }
 }

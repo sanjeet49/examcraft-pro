@@ -13,10 +13,23 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
         }
 
+        const user = await prisma.user.findUnique({
+            where: { id: session.user.id }
+        });
+
+        if (!user || !user.schoolId) {
+            return NextResponse.json({ message: "No school associated." }, { status: 400 });
+        }
+
+        if (user.role !== "SUPER_ADMIN") {
+            return NextResponse.json({ message: "Only the School SUPER_ADMIN can authorize financial purchases." }, { status: 403 });
+        }
+
         const { amount } = await req.json();
 
-        const updatedUser = await prisma.user.update({
-            where: { id: session.user.id },
+        // @ts-ignore
+        const updatedSchool = await prisma.school.update({
+            where: { id: user.schoolId },
             data: {
                 credits: { increment: amount },
                 isPremium: true
@@ -25,7 +38,8 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             message: "Credits added successfuly!",
-            credits: updatedUser.credits
+            // @ts-ignore
+            credits: updatedSchool.credits
         });
     } catch (error) {
         return NextResponse.json({ message: "Something went wrong" }, { status: 500 });

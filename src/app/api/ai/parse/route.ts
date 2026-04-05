@@ -12,9 +12,17 @@ export async function POST(req: Request) {
         const session = await getServerSession(authOptions);
         if (!session?.user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-        const user = await prisma.user.findUnique({ where: { id: session.user.id } });
-        if (!user || user.credits <= 0)
-            return NextResponse.json({ message: "Insufficient credits to use AI." }, { status: 403 });
+        const user = await prisma.user.findUnique({ 
+            where: { id: session.user.id },
+            include: { school: true } 
+        });
+        
+        let availableCredits = 0;
+        if (user?.role === "OWNER") availableCredits = 999999;
+        else if (user?.school) availableCredits = user.school.credits;
+
+        if (!user || availableCredits <= 0)
+            return NextResponse.json({ message: "Insufficient school credits to use AI." }, { status: 403 });
 
         const formData = await req.formData();
         const text = (formData.get("text") as string) || "";
@@ -151,10 +159,12 @@ SCHEMA per question object:
             return q;
         });
 
-        await prisma.user.update({
-            where: { id: session.user.id },
-            data: { credits: { decrement: 1 } },
-        });
+        if (user.role !== "OWNER" && user.schoolId) {
+            await prisma.school.update({
+                where: { id: user.schoolId },
+                data: { credits: { decrement: 1 } },
+            });
+        }
 
         return NextResponse.json({ questions: finalQuestions });
     } catch (error: any) {

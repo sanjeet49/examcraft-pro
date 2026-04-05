@@ -2,14 +2,38 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PlusCircle, FileText, Clock, AlertCircle, ShieldCheck } from "lucide-react";
+import { PlusCircle, FileText, Clock, AlertCircle, ShieldCheck, Crown } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PaperCard, EmptyPaperCard } from "@/components/dashboard/PaperCard";
 
 export default async function DashboardPage() {
     const session = await getServerSession(authOptions);
+
+    // Redirect Google OAuth users who haven't completed their profile yet
+    // (no schoolId means they registered via Google and skipped role selection)
+    if (session?.user?.id && session.user.role === "TEACHER") {
+        const dbMeta = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { schoolId: true, displayId: true }
+        });
+        if (dbMeta && !dbMeta.displayId) {
+            redirect("/complete-profile");
+        }
+    }
+
+    const dbUser = session?.user?.id ? await prisma.user.findUnique({
+        where: { id: session.user.id },
+        include: { school: true }
+    }) : null;
+
+    const availableCredits = dbUser?.school?.credits || 0;
+
+    if (session?.user?.role === "OWNER") {
+        redirect("/owner/dashboard");
+    }
 
     // Fetch real user papers from the database
     const papers = session?.user?.id
@@ -36,17 +60,17 @@ export default async function DashboardPage() {
 
     return (
         <div className="p-8 max-w-6xl mx-auto space-y-8">
-            {!session?.user?.isApproved && session?.user?.role === "TEACHER" && (
+            {!session?.user?.isApproved && session?.user?.role !== "OWNER" && (
                 <Alert variant="destructive" className="bg-amber-50 text-amber-900 border-amber-200">
                     <AlertCircle className="h-4 w-4 text-amber-600" />
                     <AlertTitle>Account Pending Approval</AlertTitle>
                     <AlertDescription>
-                        Your account is currently under review. You will not be able to create or submit exam papers until an Administrator approves your account.
+                        Your account is currently under review. At this time you can only view your dashboard but cannot access platform tools.
                     </AlertDescription>
                 </Alert>
             )}
 
-            {(session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN") && (
+            {(session?.user?.role === "ADMIN" || session?.user?.role === "SUPER_ADMIN") && session?.user?.isApproved && (
                 <Alert className="bg-indigo-50 border-indigo-200">
                     <ShieldCheck className="h-4 w-4 text-indigo-600" />
                     <AlertTitle>Admin Portal Access</AlertTitle>
@@ -59,26 +83,48 @@ export default async function DashboardPage() {
                 </Alert>
             )}
 
-            <div>
-                <h1 className="text-3xl font-bold text-gray-900">Welcome back, {session?.user?.name || "Teacher"}!</h1>
-                <p className="text-gray-500 mt-2">Here is a summary of your recent question papers and credit usage.</p>
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-8 text-white shadow-xl">
+                <div className="absolute top-0 right-0 -mt-4 -mr-4 h-32 w-32 rounded-full bg-white/10 blur-2xl"></div>
+                <div className="absolute bottom-0 left-0 -mb-4 -ml-4 h-24 w-24 rounded-full bg-white/10 blur-xl"></div>
+                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                            Welcome back, {session?.user?.name || "Teacher"}!
+                        </h1>
+                        <p className="mt-2 text-indigo-100 max-w-lg text-lg">
+                            {dbUser?.school?.name ? `Teaching at ${dbUser.school.name}. ` : ""} 
+                            Here is a summary of your recent examination papers and analytics.
+                        </p>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-none shadow-md">
+                <Card className="bg-white/80 backdrop-blur border-slate-200 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-indigo-100 text-sm font-medium uppercase tracking-wider">Available Credits</CardTitle>
+                        <CardTitle className="text-slate-500 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                            <Crown className="w-4 h-4 text-amber-500" />
+                            School Resource Wallet
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="flex items-end gap-2">
-                            <span className="text-4xl font-extrabold">{session?.user?.credits || 0}</span>
-                            <span className="text-indigo-200 mb-1">credits</span>
+                        <div className="flex items-end gap-2 text-slate-800">
+                            <span className="text-5xl font-black tracking-tighter">{availableCredits}</span>
+                            <span className="text-slate-500 mb-1.5 font-medium">Credits remaining</span>
                         </div>
-                        <Link href="/dashboard/settings">
-                            <Button variant="secondary" size="sm" className="mt-4 w-full bg-white text-indigo-600 hover:bg-gray-50">
-                                Buy More Credits
-                            </Button>
-                        </Link>
+                        
+                        {(session?.user?.role === "SUPER_ADMIN" || session?.user?.role === "ADMIN") ? (
+                            <Link href="/dashboard/settings" className="block mt-5">
+                                <Button className="w-full bg-blue-50 hover:bg-blue-100 text-blue-700 shadow-none border border-blue-200 font-semibold transition-all">
+                                    Manage School Billing
+                                </Button>
+                            </Link>
+                        ) : (
+                            <div className="mt-5 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                                <p className="text-xs text-slate-500 text-center">Pooled resources are managed by your School Administrator.</p>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -93,7 +139,7 @@ export default async function DashboardPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        {(!session?.user?.isApproved && session?.user?.role === "TEACHER") ? (
+                        {!session?.user?.isApproved ? (
                             <Button disabled className="w-full h-24 text-lg border-2 border-dashed border-gray-200 bg-gray-50 text-gray-400">
                                 <PlusCircle className="mr-2 h-6 w-6" /> Create New Paper (Pending Approval)
                             </Button>
@@ -109,7 +155,9 @@ export default async function DashboardPage() {
             </div>
 
             <div>
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Recent Papers</h2>
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Recent Examinations</h2>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {papers.length === 0 ? (
                         <>

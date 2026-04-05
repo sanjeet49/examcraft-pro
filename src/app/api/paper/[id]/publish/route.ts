@@ -29,9 +29,19 @@ export async function POST(
             return NextResponse.json({ error: "Paper not found" }, { status: 404 });
         }
 
-        // Only the owner or an Admin can publish
-        if (paper.userId !== session.user.id && session.user.role === 'TEACHER') {
-             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        const role = session.user.role;
+
+        // TEACHER can only publish their own papers
+        if (role === "TEACHER" && paper.userId !== session.user.id) {
+            return NextResponse.json({ error: "Forbidden — not your paper" }, { status: 403 });
+        }
+
+        // ADMIN/SUPER_ADMIN can publish papers in their school only
+        if ((role === "ADMIN" || role === "SUPER_ADMIN") && paper.schoolId) {
+            const callerSchoolId = (session.user as any).schoolId as string | null;
+            if (callerSchoolId !== paper.schoolId) {
+                return NextResponse.json({ error: "Forbidden — paper is in a different school" }, { status: 403 });
+            }
         }
 
         const updatedPaper = await prisma.paper.update({
