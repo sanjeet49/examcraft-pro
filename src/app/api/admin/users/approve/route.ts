@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAuditEvent, AuditEvents } from "@/lib/auditLog";
 
 export async function POST(req: Request) {
     try {
@@ -21,9 +22,17 @@ export async function POST(req: Request) {
             data: { isApproved: true }
         });
 
+        // Audit log: track who approved this user
+        logAuditEvent(AuditEvents.userApproved(
+            session.user.id,
+            session.user.role,
+            userId
+        ));
+
         return NextResponse.json({ message: "User approved successfully" }, { status: 200 });
     } catch (error) {
         console.error("Error approving user:", error);
         return NextResponse.json({ message: "Internal server error" }, { status: 500 });
     }
 }
+

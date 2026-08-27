@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAuditEvent, AuditEvents } from "@/lib/auditLog";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +23,13 @@ export async function POST(req: Request) {
                 isPremium: true
             },
         });
+
+        // Audit log: track credit purchases
+        logAuditEvent(AuditEvents.creditsAdded(
+            session.user.id,
+            amount,
+            updatedUser.credits
+        ));
 
         return NextResponse.json({
             message: "Credits added successfuly!",

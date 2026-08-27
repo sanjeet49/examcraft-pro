@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { validatePassword, validateEmail, sanitizeInput } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,29 @@ export async function POST(req: Request) {
             );
         }
 
+        // Validate email format
+        const sanitizedEmail = sanitizeInput(email).toLowerCase();
+        if (!validateEmail(sanitizedEmail)) {
+            return NextResponse.json(
+                { message: "Please provide a valid email address" },
+                { status: 400 }
+            );
+        }
+
+        // Validate password strength
+        const passwordCheck = validatePassword(password);
+        if (!passwordCheck.valid) {
+            return NextResponse.json(
+                { message: passwordCheck.errors[0], errors: passwordCheck.errors },
+                { status: 400 }
+            );
+        }
+
+        // Sanitize name
+        const sanitizedName = name ? sanitizeInput(name) : null;
+
         const existingUser = await prisma.user.findUnique({
-            where: { email },
+            where: { email: sanitizedEmail },
         });
 
         if (existingUser) {
@@ -26,13 +48,13 @@ export async function POST(req: Request) {
             );
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 12);
 
         const user = await prisma.user.create({
             data: {
-                email,
+                email: sanitizedEmail,
                 password: hashedPassword,
-                name,
+                name: sanitizedName,
             },
         });
 
@@ -48,3 +70,4 @@ export async function POST(req: Request) {
         );
     }
 }
+

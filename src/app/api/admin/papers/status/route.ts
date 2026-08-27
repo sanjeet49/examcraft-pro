@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAuditEvent, AuditEvents } from "@/lib/auditLog";
 
 export async function POST(req: Request) {
     try {
@@ -43,6 +44,15 @@ export async function POST(req: Request) {
             where: { id: paperId },
             data: { status: newStatus }
         });
+
+        // Audit log: track paper status transitions
+        logAuditEvent(AuditEvents.paperStatusChanged(
+            session?.user?.id || "unknown",
+            session?.user?.role || "unknown",
+            paperId,
+            paper.status,
+            newStatus
+        ));
 
         return NextResponse.json({ message: "Paper status updated successfully", status: newStatus }, { status: 200 });
 
