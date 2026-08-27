@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+body {
+  background-color: #f9fafb;
+}
+
+/* ===== MOBILE A4 PAPER SCALING ===== */
+/* Use CSS `zoom` (not transform) so the layout dimensions also shrink — no blank gaps between pages.
+   A4 paper at 96dpi = ~794px wide. JS sets --a4-mobile-scale based on window.innerWidth. */
+@media (max-width: 1024px) {
+  .a4-paper-scaler {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* zoom shrinks both visual AND layout size, collapsing the blank gap naturally */
+  .a4-paper-scaler .a4-paper {
+    zoom: var(--a4-mobile-scale, 0.48);
+    margin-bottom: 8px;
+  }
+}
+
+@media print {
+
+  /* Hide non-print UI definitively */
+  .hide-on-print {
+    display: none !important;
+  }
+
+  /* Reset layout height locks from Next.js container root */
+  html,
+  body {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* Expose the inner print area cleanly */
+  .print-area {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .a4-paper {
+    zoom: 1 !important;
+    width: 210mm !important;
+    height: 296.5mm !important;
+    overflow: hidden !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 10mm 15mm !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    overflow-y: hidden !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Prevent trailing blank page on last sheet */
+  .a4-paper:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 0mm;
+  }
+}
+
+/* Phase 5: Accessibility */
+.dyslexia-mode {
+  font-family: 'Lexend', 'Comic Sans MS', sans-serif !important;
+  line-height: 1.8 !important;
+  letter-spacing: 0.05em !important;
+  background-color: #FFFDD0 !important;
+  /* Soft yellow cream to reduce glare */
+  color: #1a1a1a !important;
+  /* Extremely high contrast */
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+.dyslexia-mode * {
+  font-family: 'Lexend', 'Comic Sans MS', sans-serif !important;
+}
