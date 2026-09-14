@@ -300,8 +300,14 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                         }
 
                         const qt = q.content.questionText || "___";
-                        const prefix = !/^\d+[\.\)]/.test(qt.trim()) && q.type !== "CUSTOM" ? `${q.sequenceOrder}. ` : "";
+                        const shouldShowNumber = !q.hideNumber && !q.content?.hideNumber && metadata.showQuestionNumbers !== false && !/^\d+[\.\)]/.test(qt.trim()) && q.type !== "CUSTOM";
+                        const prefix = shouldShowNumber ? `${q.sequenceOrder}. ` : "";
                         const displayQuestionText = prefix + qt;
+                        const textLines = displayQuestionText.split("\n");
+                        const buildRuns = (opts: any = {}) => textLines.flatMap((line, idx) => [
+                            ...(idx > 0 ? [new TextRun({ break: 1 })] : []),
+                            new TextRun({ text: line, ...opts })
+                        ]);
 
                         if (q.type !== "MATCH" && q.type !== "CUSTOM") {
                             if (q.type === "TF") {
@@ -319,7 +325,7 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                                         new TableRow({
                                             children: [
                                                 new TableCell({
-                                                    children: [new Paragraph({ children: [new TextRun({ text: displayQuestionText })] })],
+                                                    children: [new Paragraph({ children: buildRuns() })],
                                                     width: { size: 85, type: WidthType.PERCENTAGE },
                                                     margins: { top: 0, bottom: 0, left: 0, right: 0 }
                                                 }),
@@ -335,17 +341,13 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                                 }));
                             } else {
                                 children.push(new Paragraph({
-                                    children: [
-                                        new TextRun({ text: displayQuestionText }),
-                                    ],
+                                    children: buildRuns(),
                                     spacing: { before: 0, after: 0 }
                                 }));
                             }
                         } else if (q.type === "CUSTOM") {
                             children.push(new Paragraph({
-                                children: [
-                                    new TextRun({ text: displayQuestionText }),
-                                ],
+                                children: buildRuns(),
                                 spacing: { before: 0, after: 0 }
                             }));
                         }

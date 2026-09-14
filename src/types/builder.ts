@@ -13,6 +13,7 @@ export interface Question {
     customHeading?: string;
     sectionHeading?: string;
     hasOr?: boolean;
+    hideNumber?: boolean;
 }
 
 export interface PaperMetadata {
@@ -25,6 +26,7 @@ export interface PaperMetadata {
     standard: string;
     timeAllowed: string;
     showStudentInfo: boolean;
+    showQuestionNumbers?: boolean;
     schoolLogo?: string;
     schoolLogoWidth?: number;
     schoolLogoHeight?: number;

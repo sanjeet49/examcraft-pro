@@ -62,7 +62,8 @@ function BuilderContent() {
         instructions: "",
         standard: "",
         timeAllowed: "2 Hours",
-        showStudentInfo: true
+        showStudentInfo: true,
+        showQuestionNumbers: true
     });
 
     const [questions, setQuestions] = useState<Question[]>([]);
@@ -165,6 +166,7 @@ function BuilderContent() {
                             standard: p.layoutSettings?.standard || "",
                             timeAllowed: p.layoutSettings?.timeAllowed || "",
                             showStudentInfo: p.layoutSettings?.showStudentInfo !== false,
+                            showQuestionNumbers: p.layoutSettings?.showQuestionNumbers !== false,
                             isPublishedOnline: p.isPublishedOnline || false
                         });
                         setQuestions(p.questions || []);
@@ -778,6 +780,18 @@ function BuilderContent() {
                                         Show answer key on the printed paper
                                     </Label>
                                 </div>
+                                <div className="col-span-2 flex items-center space-x-2">
+                                    <input
+                                        type="checkbox"
+                                        id="showQuestionNumbersCheckbox"
+                                        checked={metadata.showQuestionNumbers !== false}
+                                        onChange={(e) => setMetadata({ ...metadata, showQuestionNumbers: e.target.checked })}
+                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                                    />
+                                    <Label htmlFor="showQuestionNumbersCheckbox" className="font-medium text-gray-700 cursor-pointer">
+                                        Show question numbers (e.g. 1., 2., 3.) on the printed paper
+                                    </Label>
+                                </div>
                             </div>
                         </section>
 
@@ -1008,8 +1022,23 @@ function BuilderContent() {
                                                                             />
                                                                             <span className="font-semibold text-xs">marks</span>
                                                                         </div>
-                                                                        <div className="flex flex-col items-end gap-1 px-2 border-r border-gray-200 mr-1">
-                                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                        <div className="flex items-center gap-3 px-2 border-r border-gray-200 mr-1">
+                                                                            <label className="flex items-center gap-1.5 cursor-pointer" title="Make question number optional / hide number in output">
+                                                                                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Show Number</span>
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={q.hideNumber !== true && q.content?.hideNumber !== true}
+                                                                                    onChange={(e) => {
+                                                                                        const hide = !e.target.checked;
+                                                                                        updateQuestion(q.id, {
+                                                                                            hideNumber: hide,
+                                                                                            content: { ...q.content, hideNumber: hide }
+                                                                                        });
+                                                                                    }}
+                                                                                    className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                                                                                />
+                                                                            </label>
+                                                                            <label className="flex items-center gap-1.5 cursor-pointer">
                                                                                 <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Make optional (OR)</span>
                                                                                 <input
                                                                                     type="checkbox"
@@ -1036,8 +1065,8 @@ function BuilderContent() {
                                                                             placeholder="Enter question text here..."
                                                                             value={q.content.questionText || ""}
                                                                             onChange={(e) => updateQuestion(q.id, { content: { ...q.content, questionText: e.target.value } })}
-                                                                            className="resize-none"
-                                                                            rows={2}
+                                                                            className="resize-y min-h-[64px] leading-relaxed"
+                                                                            rows={3}
                                                                         />
                                                                         <div className="flex items-center gap-4 mt-1">
                                                                             <label className="flex items-center gap-2 cursor-pointer text-sm text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-md border border-indigo-100 transition-colors w-fit">
@@ -1763,8 +1792,8 @@ function BuilderContent() {
                                             {q.type !== "MATCH" && (
                                                 <div className="font-medium">
                                                     <div className="flex justify-between items-start gap-4">
-                                                        <p className="text-justify flex-1">
-                                                            {!/^\d+[\.\)]/.test((q.content.questionText || "").trim()) && (
+                                                        <p className="text-justify flex-1 whitespace-pre-wrap">
+                                                            {!q.hideNumber && !q.content?.hideNumber && metadata.showQuestionNumbers !== false && !/^\d+[\.\)]/.test((q.content.questionText || "").trim()) && (
                                                                 <span className="font-bold mr-1">{q.sequenceOrder}.</span>
                                                             )}
                                                             {q.content.questionText || "__________________________"}
@@ -2177,8 +2206,8 @@ function BuilderContent() {
                                                         {q.type !== "MATCH" && (
                                                             <div className="font-medium">
                                                                 <div className="flex justify-between items-start gap-4">
-                                                                    <p className="text-justify flex-1">
-                                                                            {!/^\d+[\.\)]/.test((q.content.questionText || "").trim()) && (
+                                                                    <p className="text-justify flex-1 whitespace-pre-wrap">
+                                                                            {!q.hideNumber && !q.content?.hideNumber && metadata.showQuestionNumbers !== false && !/^\d+[\.\)]/.test((q.content.questionText || "").trim()) && (
                                                                                 <span className="font-bold mr-1">{q.sequenceOrder}.</span>
                                                                             )}
                                                                             <Latex>{safeLatexText(q.content.questionText || "__________________________")}</Latex>
@@ -2290,7 +2319,7 @@ function BuilderContent() {
                                                             </div>
                                                         )}
                                                         {metadata.showAnswerKey === true && q.content.solutionText && (
-                                                            <div className="mt-2 ml-4 p-2 bg-green-50 text-green-800 italic border-l-2 border-green-500 rounded text-[11pt]">
+                                                            <div className="mt-2 ml-4 p-2 bg-green-50 text-green-800 italic border-l-2 border-green-500 rounded text-[11pt] whitespace-pre-wrap">
                                                                 <span className="font-bold mr-1">Solution:</span>
                                                                 <Latex>{safeLatexText(q.content.solutionText)}</Latex>
                                                             </div>

@@ -119,10 +119,12 @@ export default function StudentReportView({
                             <div key={q.id} className="border border-gray-200 rounded-xl p-6 bg-white break-inside-avoid">
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="flex items-start gap-3">
-                                        <span className="font-bold text-indigo-900 bg-indigo-50 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
-                                            {index + 1}
-                                        </span>
-                                        <div className="text-gray-900 text-lg font-medium pt-1">
+                                        {!(q as any).hideNumber && !(content as any)?.hideNumber && (
+                                            <span className="font-bold text-indigo-900 bg-indigo-50 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
+                                                {index + 1}
+                                            </span>
+                                        )}
+                                        <div className="text-gray-900 text-lg font-medium pt-1 whitespace-pre-wrap">
                                             <Latex>{safeLatexText(content.questionText || "")}</Latex>
                                         </div>
                                     </div>

@@ -129,7 +129,8 @@ export const generateAnswerKeyPdf = async (metadata: PaperMetadata, questions: Q
         }
 
         const qt = (q.content.questionText || "").trim();
-        const prefix = !/^\d+[\.\)]/.test(qt) && q.type !== "CUSTOM" ? `${q.sequenceOrder}. ` : "";
+        const shouldShowNumber = !q.hideNumber && !q.content?.hideNumber && (metadata as any)?.showQuestionNumbers !== false && !/^\d+[\.\)]/.test(qt) && q.type !== "CUSTOM";
+        const prefix = shouldShowNumber ? `${q.sequenceOrder}. ` : "";
         const displayQuestionText = prefix + qt;
 
         // Print Base Question (Except Match matrices)

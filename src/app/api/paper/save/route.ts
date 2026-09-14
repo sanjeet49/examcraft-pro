@@ -39,12 +39,16 @@ export async function POST(req: NextRequest) {
                     instructions: metadata.instructions || "",
                     standard: metadata.standard || "",
                     timeAllowed: metadata.timeAllowed || "",
-                    showStudentInfo: metadata.showStudentInfo !== false
+                    showStudentInfo: metadata.showStudentInfo !== false,
+                    showQuestionNumbers: metadata.showQuestionNumbers !== false
                 },
                 questions: {
                     create: questions.map((q: any, index: number) => ({
                         type: q.type,
-                        content: q.content,
+                        content: {
+                            ...(q.content || {}),
+                            ...(q.hideNumber !== undefined ? { hideNumber: q.hideNumber } : {})
+                        },
                         marks: Number(q.marks) || 1,
                         sequenceOrder: q.sequenceOrder || index + 1,
                         customHeading: q.customHeading || null,

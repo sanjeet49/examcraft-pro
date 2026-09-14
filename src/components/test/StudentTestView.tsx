@@ -255,13 +255,15 @@ export default function StudentTestView({ paper }: { paper: Paper & { questions:
                             )}
                             
                             <div className="flex items-start gap-4">
-                                <span className="font-bold text-indigo-900 bg-indigo-50 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
-                                    {index + 1}
-                                </span>
+                                {!(q as any).hideNumber && !(content as any)?.hideNumber && (
+                                    <span className="font-bold text-indigo-900 bg-indigo-50 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
+                                        {index + 1}
+                                    </span>
+                                )}
                                 
                                 <div className="flex-1 space-y-4">
                                     <div className="flex justify-between items-start">
-                                        <div className="text-gray-800 text-lg">
+                                        <div className="text-gray-800 text-lg whitespace-pre-wrap">
                                             <Latex>{safeLatexText(content.questionText || "")}</Latex>
                                         </div>
                                         <span className="text-sm font-semibold text-gray-500 ml-4 flex-shrink-0">
