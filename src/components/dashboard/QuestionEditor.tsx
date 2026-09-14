@@ -159,52 +159,92 @@ export default function QuestionEditor({ q, updateQuestion }: QuestionEditorProp
             )}
 
             {q.type === "MATCH" && (
-                <div className="space-y-2 mt-4">
-                    <div className="flex justify-between items-center text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
-                        <span className="w-1/2">Column A</span>
-                        <span className="w-1/2 pl-4">Column B</span>
+                <div className="space-y-3 mt-4 bg-gray-50/70 p-3 rounded-lg border border-gray-200">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-gray-200">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={q.content.showAnswerColumn !== false}
+                                onChange={(e) => updateQuestion(q.id, { content: { ...q.content, showAnswerColumn: e.target.checked } })}
+                                className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                            />
+                            <span className="text-xs font-semibold text-gray-700">Include "Answer" column for student responses</span>
+                        </label>
+                        {q.content.showAnswerColumn !== false && (
+                            <div className="flex items-center gap-2 text-xs">
+                                <span className="text-gray-500 font-medium">Format:</span>
+                                <select
+                                    value={q.content.answerFormat || "bracket"}
+                                    onChange={(e) => updateQuestion(q.id, { content: { ...q.content, answerFormat: e.target.value } })}
+                                    className="text-xs bg-white border border-gray-300 rounded px-2 py-1 font-medium text-gray-700 cursor-pointer"
+                                >
+                                    <option value="bracket">1. (   )</option>
+                                    <option value="dash">(1) - (   )</option>
+                                    <option value="line">1. ______</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
-                    {(q.content.pairs || []).map((pair: any, pIndex: number) => (
-                        <div key={pIndex} className="flex gap-2 items-center">
-                            <div className="flex-1 flex items-center gap-2">
-                                <span className="text-xs font-bold text-gray-400 w-4">{pIndex + 1}.</span>
-                                <Input
-                                    className="flex-1 text-sm h-8"
-                                    placeholder="Item"
-                                    value={pair.left}
-                                    onChange={(e) => {
-                                        const newPairs = [...(q.content.pairs || [])];
-                                        newPairs[pIndex] = { ...newPairs[pIndex], left: e.target.value };
+
+                    <div className="flex justify-between items-center text-xs font-bold text-gray-500 uppercase tracking-wider px-1">
+                        <span className="w-5/12">Column A</span>
+                        <span className="w-5/12 pl-2">Column B</span>
+                        {q.content.showAnswerColumn !== false && (
+                            <span className="w-2/12 pl-2 text-right">Answer</span>
+                        )}
+                    </div>
+                    {(q.content.pairs || []).map((pair: any, pIndex: number) => {
+                        let ansTag = `${pIndex + 1}. (   )`;
+                        if (q.content.answerFormat === "dash") ansTag = `(${pIndex + 1}) - (   )`;
+                        else if (q.content.answerFormat === "line") ansTag = `${pIndex + 1}. ___`;
+
+                        return (
+                            <div key={pIndex} className="flex gap-2 items-center">
+                                <div className="flex-1 flex items-center gap-2">
+                                    <span className="text-xs font-bold text-gray-400 w-5">{pIndex + 1}.</span>
+                                    <Input
+                                        className="flex-1 text-sm h-8"
+                                        placeholder="Item"
+                                        value={pair.left}
+                                        onChange={(e) => {
+                                            const newPairs = [...(q.content.pairs || [])];
+                                            newPairs[pIndex] = { ...newPairs[pIndex], left: e.target.value };
+                                            updateQuestion(q.id, { content: { ...q.content, pairs: newPairs } });
+                                        }}
+                                    />
+                                </div>
+                                <div className="flex-1 flex items-center gap-2">
+                                    <span className="text-xs font-bold text-gray-400 w-5">({String.fromCharCode(97 + pIndex)})</span>
+                                    <Input
+                                        className="flex-1 text-sm h-8"
+                                        placeholder="Match"
+                                        value={pair.right}
+                                        onChange={(e) => {
+                                            const newPairs = [...(q.content.pairs || [])];
+                                            newPairs[pIndex] = { ...newPairs[pIndex], right: e.target.value };
+                                            updateQuestion(q.id, { content: { ...q.content, pairs: newPairs } });
+                                        }}
+                                    />
+                                </div>
+                                {q.content.showAnswerColumn !== false && (
+                                    <div className="w-20 text-xs font-mono font-medium text-gray-500 bg-white border border-dashed border-gray-300 rounded px-2 py-1.5 text-center shrink-0">
+                                        {ansTag}
+                                    </div>
+                                )}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-red-400 hover:text-red-600 shrink-0"
+                                    onClick={() => {
+                                        const newPairs = (q.content.pairs || []).filter((_: any, i: number) => i !== pIndex);
                                         updateQuestion(q.id, { content: { ...q.content, pairs: newPairs } });
                                     }}
-                                />
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
                             </div>
-                            <div className="flex-1 flex items-center gap-2">
-                                <span className="text-xs font-bold text-gray-400 w-4">({String.fromCharCode(97 + pIndex)})</span>
-                                <Input
-                                    className="flex-1 text-sm h-8"
-                                    placeholder="Match"
-                                    value={pair.right}
-                                    onChange={(e) => {
-                                        const newPairs = [...(q.content.pairs || [])];
-                                        newPairs[pIndex] = { ...newPairs[pIndex], right: e.target.value };
-                                        updateQuestion(q.id, { content: { ...q.content, pairs: newPairs } });
-                                    }}
-                                />
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-red-400 hover:text-red-600 shrink-0"
-                                onClick={() => {
-                                    const newPairs = (q.content.pairs || []).filter((_: any, i: number) => i !== pIndex);
-                                    updateQuestion(q.id, { content: { ...q.content, pairs: newPairs } });
-                                }}
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    ))}
+                        );
+                    })}
                     <Button
                         variant="outline"
                         size="sm"

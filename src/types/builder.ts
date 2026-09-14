@@ -67,6 +67,8 @@ export interface MatchContent {
     questionText: string;
     pairs: { left: string; right: string }[];
     solutionText?: string;
+    showAnswerColumn?: boolean;
+    answerFormat?: 'bracket' | 'dash' | 'line';
 }
 
 export interface MapContent {

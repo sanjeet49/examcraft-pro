@@ -462,15 +462,29 @@ export const generateDocx = async (metadata: PaperMetadata, questions: Question[
                                         new TableRow({
                                             children: [
                                                 new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Column A", bold: true })] })] }),
-                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Column B", bold: true })] })] })
+                                                new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Column B", bold: true })] })] }),
+                                                ...(q.content.showAnswerColumn !== false ? [
+                                                    new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Answer", bold: true })] })] })
+                                                ] : [])
                                             ]
                                         }),
-                                        ...pairs.map((pair: any, pI: number) => new TableRow({
-                                            children: [
-                                                new TableCell({ children: [new Paragraph({ text: `${pI + 1}. ${pair.left}` })] }),
-                                                new TableCell({ children: [new Paragraph({ text: `(${String.fromCharCode(97 + pI)}) ${pair.right}` })] })
-                                            ]
-                                        }))
+                                        ...pairs.map((pair: any, pI: number) => {
+                                            let ansText = `${pI + 1}. (       )`;
+                                            if (q.content.answerFormat === "dash") {
+                                                ansText = `(${pI + 1}) - (       )`;
+                                            } else if (q.content.answerFormat === "line") {
+                                                ansText = `${pI + 1}. ________`;
+                                            }
+                                            return new TableRow({
+                                                children: [
+                                                    new TableCell({ children: [new Paragraph({ text: `${pI + 1}. ${pair.left}` })] }),
+                                                    new TableCell({ children: [new Paragraph({ text: `(${String.fromCharCode(97 + pI)}) ${pair.right}` })] }),
+                                                    ...(q.content.showAnswerColumn !== false ? [
+                                                        new TableCell({ children: [new Paragraph({ text: ansText })] })
+                                                    ] : [])
+                                                ]
+                                            });
+                                        })
                                     ]
                                 }));
                             }
